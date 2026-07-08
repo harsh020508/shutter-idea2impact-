@@ -299,7 +299,7 @@ export default function Dashboard() {
 
                 {lowStock && lowStock.length > 0 ? (
                   <div className="space-y-2">
-                    {lowStock.slice(0, 5).map((item) => (
+                    {lowStock.slice(0, 5).map((item: any) => (
                       <div
                         key={item.inventory.id}
                         className="flex items-center justify-between py-2.5 px-3 rounded-lg border border-[#f2f0ed]"

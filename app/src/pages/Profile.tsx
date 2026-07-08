@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import Navigation from "@/components/Navigation";
@@ -20,7 +21,10 @@ import {
 export default function Profile() {
   const { user, isAuthenticated, isLoading } = useAuth({ redirectOnUnauthenticated: true });
 
-  const { data: retailer } = trpc.retailer.myRetailer.useQuery(undefined, {
+  const [isEditingUpi, setIsEditingUpi] = useState(false);
+  const [upiVal, setUpiVal] = useState("");
+
+  const { data: retailer, refetch: refetchRetailer } = trpc.retailer.myRetailer.useQuery(undefined, {
     enabled: isAuthenticated,
   });
 
@@ -35,6 +39,28 @@ export default function Profile() {
   const { data: todayRevenue } = trpc.bill.todayRevenue.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+
+  const updateRetailer = trpc.retailer.update.useMutation({
+    onSuccess: () => {
+      refetchRetailer();
+      setIsEditingUpi(false);
+    },
+  });
+
+  useEffect(() => {
+    if (retailer) {
+      setUpiVal(retailer.upiId || "");
+    }
+  }, [retailer]);
+
+  const handleSaveUpi = () => {
+    if (retailer) {
+      updateRetailer.mutate({
+        id: retailer.id,
+        upiId: upiVal,
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -178,6 +204,60 @@ export default function Profile() {
                     <div className="text-[13px] font-medium text-[#343433]">
                       {retailer.createdAt ? new Date(retailer.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "N/A"}
                     </div>
+                  </div>
+                </div>
+
+                {/* UPI ID Row */}
+                <div className="flex items-start gap-3 col-span-2 border-t border-[#f2f0ed] pt-4 mt-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#00ca48]/10 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-4 h-4 text-[#00ca48]" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-[11px] text-[#848281] uppercase tracking-wide font-medium">UPI ID (for receiving store payments)</div>
+                    {isEditingUpi ? (
+                      <div className="flex gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={upiVal}
+                          onChange={(e) => setUpiVal(e.target.value)}
+                          placeholder="e.g. storename@upi"
+                          className="flex-1 max-w-[300px] px-3 py-1.5 rounded-lg border border-[#f2f0ed] text-[13px] bg-white focus:outline-none focus:border-[#00ca48] font-mono"
+                        />
+                        <button
+                          onClick={handleSaveUpi}
+                          className="shutter-btn-dark py-1.5 px-4 text-[12px] flex items-center gap-1.5"
+                          disabled={updateRetailer.isPending}
+                        >
+                          {updateRetailer.isPending ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setUpiVal(retailer?.upiId || "");
+                            setIsEditingUpi(false);
+                          }}
+                          className="shutter-btn-light py-1.5 px-3 text-[12px]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[13px] font-semibold text-[#343433] font-mono">
+                          {retailer?.upiId ? (
+                            retailer.upiId
+                          ) : (
+                            <span className="text-[#848281] font-normal font-sans italic">Not set (add a UPI ID to generate checkout payment QR codes)</span>
+                          )}
+                        </span>
+                        <button
+                          onClick={() => setIsEditingUpi(true)}
+                          className="text-[12px] text-[#0090ff] hover:underline flex items-center gap-1 font-medium"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          {retailer?.upiId ? "Edit" : "Set UPI ID"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

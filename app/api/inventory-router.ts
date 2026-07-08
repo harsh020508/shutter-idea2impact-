@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { inventory, products, restockRecommendations, retailers } from "@db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 
 export const inventoryRouter = createRouter({
   // Get my inventory
@@ -174,6 +174,92 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
+  // Scan product by barcode
+  scanProductByBarcode: authedQuery
+    .input(z.object({ barcode: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+      const myRetailer = await db
+        .select()
+        .from(retailers)
+        .where(eq(retailers.userId, ctx.user.id))
+        .limit(1);
+
+      if (myRetailer.length === 0) throw new Error("Retailer not found");
+
+      const productRows = await db
+        .select()
+        .from(products)
+        .where(eq(products.barcode, input.barcode))
+        .limit(1);
+
+      if (productRows.length === 0) return null;
+
+      const product = productRows[0];
+
+      // Check if it is in inventory
+      const invRows = await db
+        .select()
+        .from(inventory)
+        .where(
+          and(
+            eq(inventory.retailerId, myRetailer[0].id),
+            eq(inventory.productId, product.id)
+          )
+        )
+        .limit(1);
+
+      return {
+        product,
+        inventoryItem: invRows[0] ?? null,
+      };
+    }),
+
+  // Search products for billing with local store inventory details
+  searchBillingProducts: authedQuery
+    .input(z.object({ query: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+      const myRetailer = await db
+        .select()
+        .from(retailers)
+        .where(eq(retailers.userId, ctx.user.id))
+        .limit(1);
+
+      if (myRetailer.length === 0) throw new Error("Retailer not found");
+
+      const searchTerm = `%${input.query.toLowerCase()}%`;
+      const matchedProducts = await db
+        .select()
+        .from(products)
+        .where(
+          sql`LOWER(${products.name}) LIKE ${searchTerm} OR ${products.barcode} = ${input.query}`
+        )
+        .limit(15);
+
+      if (matchedProducts.length === 0) return [];
+
+      const productIds = matchedProducts.map((p: any) => p.id);
+
+      const invRows = await db
+        .select()
+        .from(inventory)
+        .where(
+          and(
+            eq(inventory.retailerId, myRetailer[0].id),
+            inArray(inventory.productId, productIds)
+          )
+        );
+
+      return matchedProducts.map((p: any) => {
+        const inv = invRows.find((i: any) => i.productId === p.id);
+        return {
+          product: p,
+          inventoryItem: inv ?? null,
+        };
+      });
+    }),
+
   // Search products
   searchProducts: publicQuery
     .input(z.object({ query: z.string(), category: z.string().optional() }))
@@ -205,7 +291,7 @@ export const inventoryRouter = createRouter({
     const rows = await db
       .selectDistinct({ category: products.category })
       .from(products);
-    return rows.map((r) => r.category);
+    return rows.map((r: any) => r.category);
   }),
 
   // AI Restock: Generate recommendations
@@ -233,8 +319,8 @@ export const inventoryRouter = createRouter({
 
     // Generate AI recommendations based on stock levels and sales velocity
     const recommendations = items
-      .filter((item) => item.inventory.quantity <= item.inventory.lowStockThreshold * 2)
-      .map((item) => {
+      .filter((item: any) => item.inventory.quantity <= item.inventory.lowStockThreshold * 2)
+      .map((item: any) => {
         const stockRatio = item.inventory.quantity / item.inventory.lowStockThreshold;
         const confidence = Math.min(95, Math.max(50, 100 - stockRatio * 30));
         const recommendedQty = Math.ceil(
@@ -257,7 +343,7 @@ export const inventoryRouter = createRouter({
           reason,
         };
       })
-      .sort((a, b) => b.confidence - a.confidence)
+      .sort((a: any, b: any) => b.confidence - a.confidence)
       .slice(0, 10);
 
     // Persist recommendations

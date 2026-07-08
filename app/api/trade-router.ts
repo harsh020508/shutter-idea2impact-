@@ -74,7 +74,7 @@ export const tradeRouter = createRouter({
     if (surplusItems.length === 0) return [];
 
     // Get nearby retailers with demand (low stock on same products)
-    const productIds = surplusItems.map((s) => s.product.id);
+    const productIds = surplusItems.map((s: any) => s.product.id);
     if (productIds.length === 0) return [];
 
     const potentialBuyers = await db
@@ -97,9 +97,9 @@ export const tradeRouter = createRouter({
 
     // Calculate match scores
     const matches = potentialBuyers
-      .map((buyer) => {
+      .map((buyer: any) => {
         const surplusItem = surplusItems.find(
-          (s) => s.product.id === buyer.product.id
+          (s: any) => s.product.id === buyer.product.id
         );
         if (!surplusItem) return null;
 
@@ -128,9 +128,9 @@ export const tradeRouter = createRouter({
           status: "pending" as const,
         };
       })
-      .filter((m): m is NonNullable<typeof m> => m !== null);
+      .filter((m: any): m is NonNullable<typeof m> => m !== null);
 
-    return matches.sort((a, b) => b.matchScore - a.matchScore);
+    return matches.sort((a: any, b: any) => b.matchScore - a.matchScore);
   }),
 
   // Create a trade opportunity

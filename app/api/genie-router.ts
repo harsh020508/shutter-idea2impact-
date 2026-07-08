@@ -44,13 +44,13 @@ export const genieRouter = createRouter({
 
         const topCategories = demandData.slice(0, 5);
         aiResponse = `Based on current demand signals in your area, the top trending categories are: ${topCategories
-          .map((d) => d.category)
+          .map((d: any) => d.category)
           .join(", ")}. `;
         aiResponse += `Highest demand score is ${topCategories[0]?.demandScore ?? 0} in ${topCategories[0]?.category ?? "N/A"}. `;
         aiResponse += `Consider stocking these items to capture unmet demand.`;
 
         insights = {
-          topCategories: topCategories.map((d) => ({
+          topCategories: topCategories.map((d: any) => ({
             category: d.category,
             score: d.demandScore,
             pindrops: d.pindropCount,
@@ -164,7 +164,7 @@ export const genieRouter = createRouter({
       tip: topCategory
         ? `Demand score of ${topCategory.demandScore}/100. Consider adding ${topCategory.category} items to capture this opportunity.`
         : "Keep monitoring demand trends and community campaigns for new opportunities.",
-      topCategories: topDemand.map((d) => ({
+      topCategories: topDemand.map((d: any) => ({
         category: d.category,
         score: d.demandScore,
         trend: d.demandScore > 70 ? "up" : d.demandScore > 40 ? "stable" : "low",

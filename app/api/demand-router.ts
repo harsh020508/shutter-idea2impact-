@@ -210,9 +210,9 @@ export const demandRouter = createRouter({
       // Aggregate across categories if no specific category
       const totalScore = Math.min(
         100,
-        results.reduce((sum, r) => sum + r.demandScore, 0)
+        results.reduce((sum: number, r: any) => sum + r.demandScore, 0)
       );
-      const totalPindrops = results.reduce((sum, r) => sum + r.pindropCount, 0);
+      const totalPindrops = results.reduce((sum: number, r: any) => sum + r.pindropCount, 0);
 
       return {
         geohash,

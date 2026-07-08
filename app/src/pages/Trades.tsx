@@ -92,7 +92,7 @@ export default function Trades() {
 
             {matches && matches.length > 0 ? (
               <div className="space-y-3">
-                {matches.map((match, i) => (
+                {matches.map((match: any, i: number) => (
                   <div key={i} className="shutter-card py-4">
                     <div className="flex items-start gap-4">
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0090ff]/10 to-[#00ca48]/10 flex items-center justify-center shrink-0">

@@ -128,7 +128,7 @@ export default function Campaigns() {
 
           {/* Campaigns Grid */}
           <div className="grid md:grid-cols-2 gap-4">
-            {allCampaigns.map((campaign) => {
+            {allCampaigns.map((campaign: any) => {
               const progress = Math.round((campaign.currentSignatures / campaign.targetSignatures) * 100);
               const isNearTarget = progress >= 80;
 

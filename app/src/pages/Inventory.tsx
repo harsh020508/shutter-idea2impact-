@@ -48,12 +48,12 @@ export default function Inventory() {
     onSuccess: () => refetch(),
   });
 
-  const filteredInventory = inventory?.filter((item) =>
+  const filteredInventory = inventory?.filter((item: any) =>
     item.product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const lowStockItems = inventory?.filter(
-    (item) => item.inventory.quantity <= item.inventory.lowStockThreshold
+    (item: any) => item.inventory.quantity <= item.inventory.lowStockThreshold
   ) ?? [];
 
   return (
@@ -121,7 +121,7 @@ export default function Inventory() {
 
           {/* Inventory List */}
           <div className="space-y-2">
-            {(searchQuery ? filteredInventory : inventory)?.map((item) => {
+            {(searchQuery ? filteredInventory : inventory)?.map((item: any) => {
               const isLow = item.inventory.quantity <= item.inventory.lowStockThreshold;
               const stockPercent = Math.min(
                 100,
@@ -246,7 +246,7 @@ export default function Inventory() {
 
             {searchResults && searchResults.length > 0 && (
               <div className="mb-4 space-y-1 max-h-[180px] overflow-y-auto border border-[#f2f0ed] rounded-xl p-1">
-                {searchResults.map((product) => (
+                {searchResults.map((product: any) => (
                   <button
                     key={product.id}
                     onClick={() => setSelectedProduct(product.id)}

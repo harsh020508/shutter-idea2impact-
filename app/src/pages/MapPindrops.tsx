@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/providers/trpc";
 import Navigation from "@/components/Navigation";
 import BlobCharacter from "@/components/BlobCharacter";
+import GoogleMapHeatmap from "@/components/GoogleMapHeatmap";
 import {
   MapPin,
   Search,
@@ -33,15 +34,22 @@ export default function MapPindrops() {
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("");
   const [urgency, setUrgency] = useState<"low" | "medium" | "high">("medium");
-  const [selectedHotspot, setSelectedHotspot] = useState<(typeof HOTSPOTS)[0] | null>(null);
+  const [selectedHotspot, setSelectedHotspot] = useState<any | null>(null);
 
   const { data: trending } = trpc.pindrop.trending.useQuery({ limit: 10 });
+  const { data: mapPindrops, refetch: refetchPindrops } = trpc.demand.pindropsForMap.useQuery({
+    minLat: 8,
+    maxLat: 35,
+    minLng: 68,
+    maxLng: 92,
+  });
 
   const createPindrop = trpc.pindrop.create.useMutation({
     onSuccess: () => {
       setShowAdd(false);
       setProductName("");
       setCategory("");
+      refetchPindrops();
     },
   });
 
@@ -99,68 +107,13 @@ export default function MapPindrops() {
           <div className="grid lg:grid-cols-3 gap-6">
             {/* Map Area */}
             <div className="lg:col-span-2">
-              <div className="shutter-card p-0 overflow-hidden">
-                <div className="relative aspect-[4/3] bg-gradient-to-br from-[#e8f4f8] via-[#f5f0e8] to-[#f0e8f4]">
-                  {/* Grid lines */}
-                  <div className="absolute inset-0 opacity-20">
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <div key={`h${i}`} className="absolute left-0 right-0 h-px bg-[#121212]" style={{ top: `${(i + 1) * 10}%` }} />
-                    ))}
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <div key={`v${i}`} className="absolute top-0 bottom-0 w-px bg-[#121212]" style={{ left: `${(i + 1) * 10}%` }} />
-                    ))}
-                  </div>
-
-                  {/* Hotspots */}
-                  {HOTSPOTS.map((spot, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedHotspot(spot)}
-                      className="absolute transform -translate-x-1/2 -translate-y-1/2 group"
-                      style={{ left: `${spot.lng}%`, top: `${spot.lat}%` }}
-                    >
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg transition-transform group-hover:scale-125 ${
-                          spot.urgency === "high"
-                            ? "bg-[#ff3e00]"
-                            : spot.urgency === "medium"
-                            ? "bg-[#ffbb26]"
-                            : "bg-[#00ca48]"
-                        }`}
-                      >
-                        {spot.count}
-                      </div>
-                      <div
-                        className={`absolute inset-0 rounded-full animate-ping opacity-30 ${
-                          spot.urgency === "high"
-                            ? "bg-[#ff3e00]"
-                            : spot.urgency === "medium"
-                            ? "bg-[#ffbb26]"
-                            : "bg-[#00ca48]"
-                        }`}
-                      />
-                    </button>
-                  ))}
-
-                  {/* Legend */}
-                  <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur rounded-xl p-3 shadow-sm">
-                    <div className="text-[10px] font-medium text-[#848281] mb-1.5">Demand Level</div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1">
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#ff3e00]" />
-                        <span className="text-[9px] text-[#848281]">High</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#ffbb26]" />
-                        <span className="text-[9px] text-[#848281]">Med</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#00ca48]" />
-                        <span className="text-[9px] text-[#848281]">Low</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="bg-white rounded-xl border border-[#f2f0ed] shadow-sm overflow-hidden" style={{ height: "500px" }}>
+                <GoogleMapHeatmap
+                  mode="pindrops"
+                  pindropsData={mapPindrops || []}
+                  selectedPindrop={selectedHotspot}
+                  onSelectPindrop={(pindrop) => setSelectedHotspot(pindrop)}
+                />
               </div>
 
               {/* Selected Hotspot Detail */}

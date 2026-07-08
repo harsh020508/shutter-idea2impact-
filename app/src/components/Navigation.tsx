@@ -53,7 +53,7 @@ export default function Navigation() {
   if (isLanding && !scrolled) return null;
 
   return (
-    <nav className="shutter-nav fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 lg:px-8">
+    <nav className="shutter-nav fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between px-4 lg:px-8">
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2 shrink-0">
         <div className="w-8 h-8 rounded-lg bg-[#121212] flex items-center justify-center">

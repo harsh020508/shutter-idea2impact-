@@ -21,6 +21,7 @@ export const retailerRouter = createRouter({
         latitude: z.number().optional(),
         longitude: z.number().optional(),
         catchmentRadius: z.number().default(5),
+        upiId: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -60,6 +61,7 @@ export const retailerRouter = createRouter({
         longitude: input.longitude?.toString(),
         geohash,
         catchmentRadius: input.catchmentRadius,
+        upiId: input.upiId,
       });
 
       return { id: Number(result[0].insertId), success: true };
@@ -104,6 +106,7 @@ export const retailerRouter = createRouter({
         latitude: z.number().optional(),
         longitude: z.number().optional(),
         catchmentRadius: z.number().optional(),
+        upiId: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

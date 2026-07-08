@@ -90,7 +90,7 @@ export default function Restock() {
 
             {recommendations && recommendations.length > 0 ? (
               <div className="space-y-3">
-                {recommendations.map((rec) => (
+                {recommendations.map((rec: any) => (
                   <div key={rec.productId} className="shutter-card py-4">
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-xl bg-[#ffbb26]/10 flex items-center justify-center shrink-0">
@@ -179,7 +179,7 @@ export default function Restock() {
                 Restock History
               </h2>
               <div className="space-y-2">
-                {myRecommendations.slice(0, 5).map((item) => (
+                {myRecommendations.slice(0, 5).map((item: any) => (
                   <div
                     key={item.rec.id}
                     className="flex items-center justify-between py-3 px-4 rounded-xl bg-white border border-[#f2f0ed]"

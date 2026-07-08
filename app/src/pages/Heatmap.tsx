@@ -38,6 +38,7 @@ export default function Heatmap() {
     maxLat: 35,
     minLng: 68,
     maxLng: 92,
+    category: selectedCategory === "All" ? undefined : selectedCategory,
   });
 
   const { data: topCategories } = trpc.demand.topCategories.useQuery({ limit: 10 });
@@ -75,7 +76,7 @@ export default function Heatmap() {
     if (!heatmapData || heatmapData.length === 0) return CITY_RANKINGS;
     // Group by approximate city regions and aggregate
     const cityMap: Record<string, { score: number; count: number }> = {};
-    heatmapData.forEach((d) => {
+    heatmapData.forEach((d: any) => {
       const lat = parseFloat(String(d.latitude));
       let city = "Other";
       if (lat >= 18.5 && lat <= 19.5) city = "Mumbai";
@@ -151,10 +152,10 @@ export default function Heatmap() {
           </div>
 
           <div className="grid lg:grid-cols-3 gap-6">
-            {/* Google Map */}
+            {/* Leaflet Map */}
             <div className="lg:col-span-2">
-              <div className="shutter-card p-0 overflow-hidden" style={{ height: "500px" }}>
-                <GoogleMapHeatmap />
+              <div className="bg-white rounded-xl border border-[#f2f0ed] shadow-sm overflow-hidden" style={{ height: "500px" }}>
+                <GoogleMapHeatmap mode="heatmap" heatmapData={heatmapData} />
               </div>
 
               {/* Category Filter */}

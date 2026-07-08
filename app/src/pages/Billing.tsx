@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
@@ -28,24 +28,11 @@ interface CartItem {
   quantity: number;
 }
 
-const SAMPLE_PRODUCTS = [
-  { id: 1, name: "Amul Gold Milk 1L", category: "Dairy", barcode: "8901030633001", mrp: 72, gstRate: 0 },
-  { id: 2, name: "Amul Butter 500g", category: "Dairy", barcode: "8901030633018", mrp: 58, gstRate: 12 },
-  { id: 3, name: "Britannia Marie Gold", category: "Biscuits", barcode: "8901063018708", mrp: 35, gstRate: 18 },
-  { id: 4, name: "Parle-G 100g", category: "Biscuits", barcode: "8901719104045", mrp: 10, gstRate: 18 },
-  { id: 5, name: "Maggi Noodles 70g", category: "Noodles", barcode: "8901030742703", mrp: 14, gstRate: 18 },
-  { id: 6, name: "Tata Salt 1kg", category: "Staples", barcode: "8901030834910", mrp: 28, gstRate: 0 },
-  { id: 7, name: "Aashirvaad Atta 5kg", category: "Staples", barcode: "8901030954014", mrp: 325, gstRate: 0 },
-  { id: 8, name: "Fortune Sunflower Oil 1L", category: "Staples", barcode: "8906014830015", mrp: 165, gstRate: 5 },
-  { id: 9, name: "Red Label Tea 500g", category: "Beverages", barcode: "8901030633810", mrp: 285, gstRate: 5 },
-  { id: 10, name: "Nescafe Classic 50g", category: "Beverages", barcode: "8901030615304", mrp: 195, gstRate: 18 },
-  { id: 11, name: "Coca-Cola 750ml", category: "Beverages", barcode: "8901765112016", mrp: 40, gstRate: 28 },
-  { id: 12, name: "Cadbury Dairy Milk", category: "Confectionery", barcode: "8901233018709", mrp: 40, gstRate: 18 },
-];
-
 export default function Billing() {
   useAuth({ redirectOnUnauthenticated: true });
   const navigate = useNavigate();
+  const utils = trpc.useUtils();
+
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showReview, setShowReview] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "upi" | "card">("cash");
@@ -53,15 +40,57 @@ export default function Billing() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showScanner, setShowScanner] = useState(false);
 
+  // Fetch retailer details for store name and UPI ID
+  const { data: retailer } = trpc.retailer.myRetailer.useQuery(undefined);
+
+  // Debounced search for product queries
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 200);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Fetch products matching search query
+  const { data: matchedDbProducts } = trpc.inventory.searchBillingProducts.useQuery(
+    { query: debouncedSearch },
+    { enabled: debouncedSearch.length >= 1 }
+  );
+
   const createBill = trpc.bill.create.useMutation({
     onSuccess: () => {
       setComplete(true);
     },
   });
 
+  const handleBarcodeScan = async (barcode: string) => {
+    try {
+      const data = await utils.inventory.scanProductByBarcode.fetch({ barcode });
+      if (data) {
+        const product = data.product;
+        const inv = data.inventoryItem;
+        const price = inv?.sellingPrice ? parseFloat(inv.sellingPrice) : parseFloat(product.mrp);
+        const gstRate = parseFloat(product.gstRate || "0");
 
+        addToCart({
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          mrp: price,
+          gstRate,
+        });
+      } else {
+        alert(`Product with barcode "${barcode}" not found in master catalog.`);
+      }
+    } catch (err) {
+      console.error("Barcode scan lookup failed", err);
+    } finally {
+      setShowScanner(false);
+    }
+  };
 
-  const addToCart = (product: (typeof SAMPLE_PRODUCTS)[0]) => {
+  const addToCart = (product: { id: number; name: string; category: string; mrp: number; gstRate: number }) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.productId === product.id);
       if (existing) {
@@ -123,52 +152,153 @@ export default function Billing() {
     });
   };
 
-  const filteredProducts = searchQuery
-    ? SAMPLE_PRODUCTS.filter(
-        (p) =>
-          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.barcode.includes(searchQuery)
-      )
+  const filteredProducts = matchedDbProducts
+    ? matchedDbProducts.map((p: any) => {
+        const price = p.inventoryItem?.sellingPrice
+          ? parseFloat(p.inventoryItem.sellingPrice)
+          : parseFloat(p.product.mrp);
+        return {
+          id: p.product.id,
+          name: p.product.name,
+          category: p.product.category,
+          barcode: p.product.barcode || "",
+          mrp: price,
+          gstRate: parseFloat(p.product.gstRate || "0"),
+        };
+      })
     : [];
 
   if (complete) {
     return (
       <div className="min-h-screen" style={{ background: "var(--color-warm-canvas)" }}>
         <Navigation />
-        <div className="pt-24 px-4 flex items-center justify-center min-h-[80vh]">
-          <div className="text-center max-w-sm">
-            <div className="w-20 h-20 rounded-full bg-[#00ca48]/10 flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-10 h-10 text-[#00ca48]" />
+        <div className="pt-24 px-4 flex flex-col items-center justify-center min-h-[85vh] print:pt-0">
+          <div className="text-center w-full max-w-sm print:hidden">
+            <div className="w-16 h-16 rounded-full bg-[#00ca48]/10 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8 text-[#00ca48]" />
             </div>
-            <h2 className="shutter-heading text-[28px] mb-3" style={{ color: "var(--color-charcoal-primary)" }}>
+            <h2 className="shutter-heading text-[24px] mb-1" style={{ color: "var(--color-charcoal-primary)" }}>
               Payment Complete!
             </h2>
-            <p className="text-[14px] text-[#848281] mb-2">
-              Bill total: <span className="font-semibold text-[#121212]">₹{total.toFixed(2)}</span>
+            <p className="text-[12px] text-[#848281] mb-6">
+              Inventory updated automatically. Preview your receipt below:
             </p>
-            <p className="text-[12px] text-[#c6c6c6] mb-8">
-              {cart.length} items sold. Inventory updated automatically.
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  setCart([]);
-                  setComplete(false);
-                  setShowReview(false);
-                }}
-                className="shutter-btn-dark w-full"
-              >
-                New Bill
-              </button>
-              <button
-                onClick={() => navigate("/dashboard")}
-                className="shutter-btn-light w-full"
-              >
-                Back to Dashboard
-              </button>
+          </div>
+
+          {/* Receipt View Container */}
+          <div className="bg-white p-6 rounded-2xl border border-[#f2f0ed] text-left font-mono text-[12px] shadow-sm w-full max-w-[320px] mx-auto mb-6 print-receipt print:border-0 print:shadow-none print:p-0 print:my-0">
+            <div className="text-center mb-4">
+              <h4 className="font-bold text-[14px] uppercase text-[#121212] tracking-tight">
+                {retailer?.storeName || "Shutter Kirana"}
+              </h4>
+              <p className="text-[11px] text-[#848281] mt-0.5">
+                {retailer?.address || "Mumbai, Maharashtra"}
+              </p>
+              {retailer?.phone && (
+                <p className="text-[11px] text-[#848281]">Tel: {retailer.phone}</p>
+              )}
+              {retailer?.gstin && (
+                <p className="text-[11px] text-[#848281]">GSTIN: {retailer.gstin}</p>
+              )}
+              <div className="border-b border-dashed border-[#c6c6c6] my-3"></div>
+              <div className="flex justify-between text-[11px] text-[#474645]">
+                <span>Bill No: B{Date.now().toString().slice(-6)}</span>
+                <span>{new Date().toLocaleDateString("en-IN")}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {cart.map((item) => (
+                <div key={item.productId} className="flex justify-between text-[#121212]">
+                  <div className="flex-1 pr-4">
+                    <div className="font-medium">{item.name}</div>
+                    <div className="text-[10px] text-[#848281]">
+                      {item.quantity} × ₹{item.unitPrice.toFixed(2)}
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-semibold">
+                    ₹{(item.unitPrice * item.quantity).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-b border-dashed border-[#c6c6c6] my-3"></div>
+
+            <div className="space-y-1.5 text-[#474645]">
+              <div className="flex justify-between text-[11px]">
+                <span>Subtotal</span>
+                <span>₹{subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-[11px]">
+                <span>GST ({gstAmount > 0 ? "Included" : "0%"})</span>
+                <span>₹{gstAmount.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-dashed border-[#c6c6c6] pt-1.5 flex justify-between font-bold text-[14px] text-[#121212]">
+                <span>GRAND TOTAL</span>
+                <span>₹{total.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="border-b border-dashed border-[#c6c6c6] my-3"></div>
+
+            <div className="text-center text-[10px] text-[#848281] uppercase leading-relaxed">
+              Paid via {paymentMethod.toUpperCase()}
+              <br />
+              Thank you for shopping!
             </div>
           </div>
+
+          {/* Action Buttons */}
+          <div className="w-full max-w-[320px] flex flex-col gap-2 print:hidden">
+            <button
+              onClick={() => window.print()}
+              className="shutter-btn-dark w-full bg-[#00ca48] hover:bg-[#00b03e] text-white flex items-center justify-center gap-2"
+            >
+              Print Receipt
+            </button>
+            <button
+              onClick={() => {
+                setCart([]);
+                setComplete(false);
+                setShowReview(false);
+              }}
+              className="shutter-btn-dark w-full"
+            >
+              New Bill
+            </button>
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="shutter-btn-light w-full"
+            >
+              Back to Dashboard
+            </button>
+          </div>
         </div>
+
+        {/* Global Print-only Styles */}
+        <style>{`
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            .print-receipt, .print-receipt * {
+              visibility: visible;
+            }
+            .print-receipt {
+              position: absolute;
+              left: 50%;
+              top: 0;
+              transform: translateX(-50%);
+              width: 80mm;
+              max-width: 100%;
+              margin: 0 auto;
+              padding: 0;
+              border: 0 !important;
+              box-shadow: none !important;
+            }
+          }
+        `}</style>
       </div>
     );
   }
@@ -217,7 +347,7 @@ export default function Billing() {
             {/* Search Results */}
             {filteredProducts.length > 0 && (
               <div className="mt-3 space-y-1 max-h-[200px] overflow-y-auto">
-                {filteredProducts.map((product) => (
+                {filteredProducts.map((product: any) => (
                   <button
                     key={product.id}
                     onClick={() => {
@@ -369,11 +499,7 @@ export default function Billing() {
       {showScanner && (
         <BarcodeScanner
           onScan={(barcode) => {
-            const product = SAMPLE_PRODUCTS.find((p) => p.barcode === barcode);
-            if (product) {
-              addToCart(product);
-            }
-            setShowScanner(false);
+            handleBarcodeScan(barcode);
           }}
           onClose={() => setShowScanner(false)}
         />
@@ -422,6 +548,47 @@ export default function Billing() {
               </div>
             </div>
 
+            {/* UPI QR Payment Block */}
+            {paymentMethod === "upi" && (
+              <>
+                {!retailer?.upiId ? (
+                  <div className="bg-[#ff3e00]/10 text-[#ff3e00] rounded-xl p-4 mb-5 text-[12px] leading-relaxed">
+                    ⚠️ <strong>UPI ID not configured!</strong> Please configure your UPI ID on the{" "}
+                    <a href="/profile" className="underline font-semibold hover:text-[#ff3e00]/80">
+                      Profile Page
+                    </a>{" "}
+                    to accept checkout QR payments.
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center bg-white p-4 rounded-xl border border-[#f2f0ed] mb-5 text-center">
+                    <div className="text-[12px] font-semibold text-[#121212] mb-1">
+                      UPI Payment QR Code
+                    </div>
+                    <div className="text-[11px] text-[#848281] mb-4">
+                      Scan using Google Pay, PhonePe, Paytm, or BHIM
+                    </div>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=${encodeURIComponent(
+                        `upi://pay?pa=${retailer.upiId}&pn=${encodeURIComponent(
+                          retailer.storeName
+                        )}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent(
+                          `Purchase B${Date.now().toString().slice(-6)}`
+                        )}`
+                      )}`}
+                      alt="UPI Payment QR Code"
+                      className="w-[180px] h-[180px] border border-[#f2f0ed] rounded-lg shadow-sm"
+                    />
+                    <div className="text-[14px] font-bold text-[#121212] mt-3">
+                      ₹{total.toFixed(2)}
+                    </div>
+                    <div className="text-[10px] text-[#848281] font-mono mt-1">
+                      {retailer.upiId}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
             <div className="flex items-center gap-2 mb-4 text-[12px] text-[#848281]">
               <CheckCircle2 className="w-3.5 h-3.5 text-[#00ca48]" />
               Payment via {paymentMethod.toUpperCase()}
@@ -429,8 +596,8 @@ export default function Billing() {
 
             <button
               onClick={handleCheckout}
-              disabled={createBill.isPending}
-              className="w-full shutter-btn-dark py-3 flex items-center justify-center gap-2 disabled:opacity-50"
+              disabled={createBill.isPending || (paymentMethod === "upi" && !retailer?.upiId)}
+              className="w-full shutter-btn-dark py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {createBill.isPending ? (
                 "Processing..."

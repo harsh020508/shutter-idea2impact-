@@ -59,6 +59,7 @@ export const retailers = mysqlTable(
     isActive: mysqlEnum("isActive", ["active", "inactive"])
       .default("active")
       .notNull(),
+    upiId: varchar("upiId", { length: 255 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt")
       .defaultNow()
