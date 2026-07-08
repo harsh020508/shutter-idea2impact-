@@ -12,14 +12,13 @@ import Genie from "./pages/Genie";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import RetailerSetup from "./pages/RetailerSetup";
-import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<Dashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/billing" element={<Billing />} />
       <Route path="/inventory" element={<Inventory />} />

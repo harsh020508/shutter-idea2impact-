@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2";
 import { env } from "../lib/env";
 import * as schema from "@db/schema";
 import * as relations from "@db/relations";
@@ -190,6 +191,7 @@ function createMockDbProxy(tableName?: string): any {
   return proxy;
 }
 
+let pool: mysql.Pool | null = null;
 let instance: ReturnType<typeof drizzle<typeof fullSchema>> | null = null;
 
 export function getDb() {
@@ -199,8 +201,9 @@ export function getDb() {
   }
 
   if (!instance) {
-    instance = drizzle(env.databaseUrl, {
-      mode: "planetscale",
+    pool = mysql.createPool(env.databaseUrl);
+    instance = drizzle(pool, {
+      mode: "default",
       schema: fullSchema,
     });
   }

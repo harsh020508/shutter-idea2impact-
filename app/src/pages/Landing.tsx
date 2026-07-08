@@ -85,7 +85,7 @@ export default function Landing() {
                   Get Started
                   <ArrowRight className="w-4 h-4" />
                 </Link>
-                <Link to="/login" className="shutter-btn-light">
+                <Link to="/dashboard" className="shutter-btn-light">
                   Log In
                 </Link>
               </>

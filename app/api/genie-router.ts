@@ -29,74 +29,81 @@ export const genieRouter = createRouter({
 
       const retailerId = myRetailer.length > 0 ? myRetailer[0].id : null;
 
-      // Generate AI response based on query type
-      const query = input.query.toLowerCase();
+      // Fetch contextual store and local demand data to inject into the LLM prompt
+      const retailer = myRetailer.length > 0 ? myRetailer[0] : null;
+      const storeName = retailer ? retailer.storeName : "Local Kirana Store";
+      const city = retailer ? retailer.city : "Mumbai";
+
+      const demandData = await db
+        .select()
+        .from(demandAggregates)
+        .orderBy(desc(demandAggregates.demandScore))
+        .limit(5);
+
+      const contextString = `
+Store Name: ${storeName}
+Location: ${city}
+Top local demand categories (crowdsourced):
+${demandData.map((d: any) => `- ${d.category} (Demand Score: ${d.demandScore}/100)`).join("\n")}
+`;
+
+
+
       let aiResponse = "";
-      let insights: Record<string, unknown> = {};
+      try {
+        const apiKey = "AQ.Ab8RN6JM8aV_1fHCjmCe5FY3vZUIpkfkPtNTRAYYj0QrgqzZEA";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: input.query
+                  }
+                ]
+              }
+            ],
+            systemInstruction: {
+              parts: [
+                {
+                  text: `You are Genie, a smart retail AI assistant for the Shutter platform.
+You are helping the store owner of "${storeName}" located in ${city}.
+Use the following local market context to inform your advice if relevant:
+${contextString}
 
-      if (query.includes("demand") || query.includes("trend")) {
-        // Get demand data for location
-        const demandData = await db
-          .select()
-          .from(demandAggregates)
-          .orderBy(desc(demandAggregates.demandScore))
-          .limit(10);
+Provide a helpful, direct, and concise response to the owner's query in 3-4 sentences. Respond to whatever they ask directly and clearly.`
+                }
+              ]
+            }
+          }),
+        });
 
-        const topCategories = demandData.slice(0, 5);
-        aiResponse = `Based on current demand signals in your area, the top trending categories are: ${topCategories
-          .map((d: any) => d.category)
-          .join(", ")}. `;
-        aiResponse += `Highest demand score is ${topCategories[0]?.demandScore ?? 0} in ${topCategories[0]?.category ?? "N/A"}. `;
-        aiResponse += `Consider stocking these items to capture unmet demand.`;
-
-        insights = {
-          topCategories: topCategories.map((d: any) => ({
-            category: d.category,
-            score: d.demandScore,
-            pindrops: d.pindropCount,
-          })),
-          recommendation: "Increase inventory for top 3 categories",
-        };
-      } else if (query.includes("location") || query.includes("where")) {
-        aiResponse = `Analyzing your area's demand patterns... `;
-        aiResponse += `High-demand zones are clustered near residential areas with limited retail access. `;
-        aiResponse += `Opening hours between 7-10 AM and 5-9 PM capture 65% of daily demand. `;
-        aiResponse += `Consider extending evening hours and stocking quick-commerce items.`;
-
-        insights = {
-          peakHours: ["7-10 AM", "5-9 PM"],
-          opportunityZones: 3,
-          recommendation: "Extend evening operating hours",
-        };
-      } else if (query.includes("competitor") || query.includes("market")) {
-        aiResponse = `Market analysis for your catchment area shows moderate competition. `;
-        aiResponse += `There are approximately 8-12 kirana stores within 2km radius. `;
-        aiResponse += `Your unique opportunity lies in stocking specialty items with high demand signals: `;
-        aiResponse += `organic products, pet supplies, and premium dairy alternatives. `;
-        aiResponse += `These categories show 40% higher margins than standard FMCG.`;
-
-        insights = {
-          competitorCount: "8-12",
-          radius: "2km",
-          opportunityCategories: ["organic products", "pet supplies", "premium dairy"],
-          marginPremium: "40%",
-        };
-      } else {
-        aiResponse = `Based on your query about "${input.query}", here's my analysis: `;
-        aiResponse += `The local retail landscape shows strong demand for convenience items and fresh produce. `;
-        aiResponse += `Community campaigns indicate 3 new product categories being requested in your area. `;
-        aiResponse += `I recommend reviewing the trending demand section on your dashboard `;
-        aiResponse += `and considering the AI restock recommendations for optimal inventory mix.`;
-
-        insights = {
-          suggestedActions: [
-            "Review trending demand dashboard",
-            "Check AI restock recommendations",
-            "Monitor community campaigns",
-          ],
-          confidence: 78,
-        };
+        if (response.ok) {
+          const data: any = await response.json();
+          aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } else {
+          console.error("[Gemini] API returned status", response.status, await response.text());
+        }
+      } catch (err) {
+        console.error("[Gemini] request failed", err);
       }
+
+      if (!aiResponse) {
+        aiResponse = `Based on your query about "${input.query}", convenience items and dairy products show high local demand signals. I recommend reviewing your inventory levels to match crowdsourced demand hotspots.`;
+      }
+
+      const insights = {
+        topCategories: demandData.map((d: any) => ({
+          category: d.category,
+          score: d.demandScore,
+        })),
+        recommendation: "Review stock of top high-demand categories to capture local purchase interest.",
+      };
 
       // Save query
       if (retailerId) {

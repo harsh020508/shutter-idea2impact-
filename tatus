@@ -1,0 +1,145 @@
+warning: in the working copy of 'app/api/genie-router.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/api/queries/connection.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/App.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/const.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/pages/Landing.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/app/api/genie-router.ts b/app/api/genie-router.ts[m
+[1mindex 1252b3a..75bf71d 100644[m
+[1m--- a/app/api/genie-router.ts[m
+[1m+++ b/app/api/genie-router.ts[m
+[36m@@ -29,75 +29,82 @@[m [mexport const genieRouter = createRouter({[m
+ [m
+       const retailerId = myRetailer.length > 0 ? myRetailer[0].id : null;[m
+ [m
+[31m-      // Generate AI response based on query type[m
+[31m-      const query = input.query.toLowerCase();[m
+[32m+[m[32m      // Fetch contextual store and local demand data to inject into the LLM prompt[m
+[32m+[m[32m      const retailer = myRetailer.length > 0 ? myRetailer[0] : null;[m
+[32m+[m[32m      const storeName = retailer ? retailer.storeName : "Local Kirana Store";[m
+[32m+[m[32m      const city = retailer ? retailer.city : "Mumbai";[m
+[32m+[m
+[32m+[m[32m      const demandData = await db[m
+[32m+[m[32m        .select()[m
+[32m+[m[32m        .from(demandAggregates)[m
+[32m+[m[32m        .orderBy(desc(demandAggregates.demandScore))[m
+[32m+[m[32m        .limit(5);[m
+[32m+[m
+[32m+[m[32m      const contextString = `[m
+[32m+[m[32mStore Name: ${storeName}[m
+[32m+[m[32mLocation: ${city}[m
+[32m+[m[32mTop local demand categories (crowdsourced):[m
+[32m+[m[32m${demandData.map((d: any) => `- ${d.category} (Demand Score: ${d.demandScore}/100)`).join("\n")}[m
+[32m+[m[32m`;[m
+[32m+[m
+[32m+[m
+[32m+[m
+       let aiResponse = "";[m
+[31m-      let insights: Record<string, unknown> = {};[m
+[31m-[m
+[31m-      if (query.includes("demand") || query.includes("trend")) {[m
+[31m-        // Get demand data for location[m
+[31m-        const demandData = await db[m
+[31m-          .select()[m
+[31m-          .from(demandAggregates)[m
+[31m-          .orderBy(desc(demandAggregates.demandScore))[m
+[31m-          .limit(10);[m
+[31m-[m
+[31m-        const topCategories = demandData.slice(0, 5);[m
+[31m-        aiResponse = `Based on current demand signals in your area, the top trending categories are: ${topCategories[m
+[31m-          .map((d: any) => d.category)[m
+[31m-          .join(", ")}. `;[m
+[31m-        aiResponse += `Highest demand score is ${topCategories[0]?.demandScore ?? 0} in ${topCategories[0]?.category ?? "N/A"}. `;[m
+[31m-        aiResponse += `Consider stocking these items to capture unmet demand.`;[m
+[31m-[m
+[31m-        insights = {[m
+[31m-          topCategories: topCategories.map((d: any) => ({[m
+[31m-            category: d.category,[m
+[31m-            score: d.demandScore,[m
+[31m-            pindrops: d.pindropCount,[m
+[31m-          })),[m
+[31m-          recommendation: "Increase inventory for top 3 categories",[m
+[31m-        };[m
+[31m-      } else if (query.includes("location") || query.includes("where")) {[m
+[31m-        aiResponse = `Analyzing your area's demand patterns... `;[m
+[31m-        aiResponse += `High-demand zones are clustered near residential areas with limited retail access. `;[m
+[31m-        aiResponse += `Opening hours between 7-10 AM and 5-9 PM capture 65% of daily demand. `;[m
+[31m-        aiResponse += `Consider extending evening hours and stocking quick-commerce items.`;[m
+[31m-[m
+[31m-        insights = {[m
+[31m-          peakHours: ["7-10 AM", "5-9 PM"],[m
+[31m-          opportunityZones: 3,[m
+[31m-          recommendation: "Extend evening operating hours",[m
+[31m-        };[m
+[31m-      } else if (query.includes("competitor") || query.includes("market")) {[m
+[31m-        aiResponse = `Market analysis for your catchment area shows moderate competition. `;[m
+[31m-        aiResponse += `There are approximately 8-12 kirana stores within 2km radius. `;[m
+[31m-        aiResponse += `Your unique opportunity lies in stocking specialty items with high demand signals: `;[m
+[31m-        aiResponse += `organic products, pet supplies, and premium dairy alternatives. `;[m
+[31m-        aiResponse += `These categories show 40% higher margins than standard FMCG.`;[m
+[31m-[m
+[31m-        insights = {[m
+[31m-          competitorCount: "8-12",[m
+[31m-          radius: "2km",[m
+[31m-          opportunityCategories: ["organic products", "pet supplies", "premium dairy"],[m
+[31m-          marginPremium: "40%",[m
+[31m-        };[m
+[31m-      } else {[m
+[31m-        aiResponse = `Based on your query about "${input.query}", here's my analysis: `;[m
+[31m-        aiResponse += `The local retail landscape shows strong demand for convenience items and fresh produce. `;[m
+[31m-        aiResponse += `Community campaigns indicate 3 new product categories being requested in your area. `;[m
+[31m-        aiResponse += `I recommend reviewing the trending demand section on your dashboard `;[m
+[31m-        aiResponse += `and considering the AI restock recommendations for optimal inventory mix.`;[m
+[31m-[m
+[31m-        insights = {[m
+[31m-          suggestedActions: [[m
+[31m-            "Review trending demand dashboard",[m
+[31m-            "Check AI restock recommendations",[m
+[31m-            "Monitor community campaigns",[m
+[31m-          ],[m
+[31m-          confidence: 78,[m
+[31m-        };[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        const apiKey = "AQ.Ab8RN6JM8aV_1fHCjmCe5FY3vZUIpkfkPtNTRAYYj0QrgqzZEA";[m
+[32m+[m[32m        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;[m
+[32m+[m[32m        const response = await fetch(url, {[m
+[32m+[m[32m          method: "POST",[m
+[32m+[m[32m          headers: {[m
+[32m+[m[32m            "Content-Type": "application/json",[m
+[32m+[m[32m          },[m
+[32m+[m[32m          body: JSON.stringify({[m
+[32m+[m[32m            contents: [[m
+[32m+[m[32m              {[m
+[32m+[m[32m                parts: [[m
+[32m+[m[32m                  {[m
+[32m+[m[32m                    text: input.query[m
+[32m+[m[32m                  }[m
+[32m+[m[32m                ][m
+[32m+[m[32m              }[m
+[32m+[m[32m            ],[m
+[32m+[m[32m            systemInstruction: {[m
+[32m+[m[32m              parts: [[m
+[32m+[m[32m                {[m
+[32m+[m[32m                  text: `You are Genie, a smart retail AI assistant for the Shutter platform.[m
+[32m+[m[32mYou are helping the store owner of "${storeName}" located in ${city}.[m
+[32m+[m[32mUse the following local market context to inform your advice if relevant:[m
+[32m+[m[32m${contextString}[m
+[32m+[m
+[32m+[m[32mProvide a helpful, direct, and concise response to the owner's query in 3-4 sentences. Respond to whatever they ask directly and clearly.`[m
+[32m+[m[32m                }[m
+[32m+[m[32m              ][m
+[32m+[m[32m            }[m
+[32m+[m[32m          }),[m
+[32m+[m[32m        });[m
+[32m+[m
+[32m+[m[32m        if (response.ok) {[m
+[32m+[m[32m          const data: any = await response.json();[m
+[32m+[m[32m          aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m          console.error("[Gemini] API returned status", response.status, await response.text());[m
+[32m+[m[32m        }[m
+[32m+[m[32m      } catch (err) {[m
+[32m+[m[32m        console.error("[Gemini] request failed", err);[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      if (!aiResponse) {[m
+[32m+[m[32m        aiResponse = `Based on your query about "${input.query}", convenience items and dairy products show high local demand signals. I recom
