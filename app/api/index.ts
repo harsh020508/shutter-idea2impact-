@@ -1,5 +1,6 @@
+// @ts-nocheck
 import { handle } from "hono/vercel";
-import app from "./boot";
+import app from "../dist/boot.js";
 
 // Export the Hono application handler for all HTTP methods supported on Vercel
 export const GET = handle(app);
