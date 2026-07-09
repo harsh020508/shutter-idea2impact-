@@ -18,22 +18,24 @@ import {
   Store,
   Settings,
 } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Billing", href: "/billing", icon: ScanLine },
-  { label: "Inventory", href: "/inventory", icon: Package },
-  { label: "AI Restock", href: "/restock", icon: TrendingUp },
-  { label: "Trades", href: "/trades", icon: Handshake },
-  { label: "Pindrops", href: "/pindrops", icon: MapPin },
-  { label: "Campaigns", href: "/campaigns", icon: Megaphone },
-  { label: "Heatmap", href: "/heatmap", icon: Flame },
-  { label: "Genie", href: "/genie", icon: Sparkles },
-  { label: "Profile", href: "/profile", icon: User },
-  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
+  { label: "Billing", href: "/billing", icon: ScanLine, key: "billing" },
+  { label: "Inventory", href: "/inventory", icon: Package, key: "inventory" },
+  { label: "AI Restock", href: "/restock", icon: TrendingUp, key: "restock" },
+  { label: "Trades", href: "/trades", icon: Handshake, key: "trades" },
+  { label: "Pindrops", href: "/pindrops", icon: MapPin, key: "pindrops" },
+  { label: "Campaigns", href: "/campaigns", icon: Megaphone, key: "campaigns" },
+  { label: "Heatmap", href: "/heatmap", icon: Flame, key: "heatmap" },
+  { label: "Genie", href: "/genie", icon: Sparkles, key: "genie" },
+  { label: "Profile", href: "/profile", icon: User, key: "profile" },
+  { label: "Settings", href: "/settings", icon: Settings, key: "settings" },
 ];
 
 export default function Navigation() {
+  const { t } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
@@ -83,7 +85,7 @@ export default function Navigation() {
                 }`}
               >
                 <item.icon className="w-3.5 h-3.5" />
-                {item.label}
+                {t(item.key)}
               </Link>
             );
           })}
@@ -147,7 +149,7 @@ export default function Navigation() {
                   }`}
                 >
                   <item.icon className="w-4 h-4" />
-                  {item.label}
+                  {t(item.key)}
                 </Link>
               );
             })}

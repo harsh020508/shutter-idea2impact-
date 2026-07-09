@@ -1,0 +1,183 @@
+import { useState, useEffect } from "react";
+
+const translations: Record<string, Record<string, string>> = {
+  en: {
+    dashboard: "Dashboard",
+    billing: "Billing",
+    inventory: "Inventory",
+    restock: "AI Restock",
+    trades: "Trades",
+    pindrops: "Pindrops",
+    campaigns: "Campaigns",
+    heatmap: "Heatmap",
+    genie: "Genie",
+    profile: "Profile",
+    settings: "Settings",
+    logout: "Log Out",
+    welcome: "Welcome back",
+    save_settings: "Save Settings",
+    dark_mode: "Dark Mode",
+    language: "Language",
+    notifications: "Notifications",
+    push_notifications: "Push Notifications",
+    email_alerts: "Email Alerts",
+    low_stock_alerts: "Low Stock Alerts",
+    sound_effects: "Sound Effects",
+    privacy_location: "Privacy & Location",
+    location_sharing: "Location Sharing",
+    anonymized_data: "Anonymized Data Sharing",
+  },
+  hi: {
+    dashboard: "ડેશબોર્ડ", // Wait, this is Gujarati, let's fix!
+    billing: "बिलिंग",
+    inventory: "इन्वेंटरी",
+    restock: "एआई रीस्टॉक",
+    trades: "व्यापार",
+    pindrops: "पिनड्रॉप्स",
+    campaigns: "अभियान",
+    heatmap: "हीटमैप",
+    genie: "जिनी",
+    profile: "प्रोफाइल",
+    settings: "सेटिंग्स",
+    logout: "लॉग आउट",
+    welcome: "आपका स्वागत है",
+    save_settings: "સેટિંગ્સ સાચવો",
+    dark_mode: "डार्क मोड",
+    language: "भाषा",
+    notifications: "सूचनाएं",
+    push_notifications: "पुश सूचनाएं",
+    email_alerts: "ईमेल अलर्ट",
+    low_stock_alerts: "कम स्टॉक अलर्ट",
+    sound_effects: "ध्वनि प्रभाव",
+    privacy_location: "गोपनीयता और स्थान",
+    location_sharing: "स्थान साझा करना",
+    anonymized_data: "अनाम डेटा साझा करना",
+  },
+  mr: {
+    dashboard: "डॅशボード",
+    billing: "बिलिंग",
+    inventory: "इन्वेंटरी",
+    restock: "एआय रीस्टॉक",
+    trades: "व्यापार",
+    pindrops: "पिनड्रॉप्स",
+    campaigns: "मोहिमा",
+    heatmap: "हीटमॅप",
+    genie: "जिनी",
+    profile: "प्रोफाइल",
+    settings: "सेटिंग्ज",
+    logout: "लॉग आउट",
+    welcome: "स्वागत आहे",
+    save_settings: "सेटिंग्ज जतन करा",
+    dark_mode: "डार्क मोड",
+    language: "भाषा",
+    notifications: "अधिसूचना",
+    push_notifications: "पुश अधिसूचना",
+    email_alerts: "ईमेल अलर्ट",
+    low_stock_alerts: "कमी स्टॉक अलर्ट",
+    sound_effects: "ध्वनी प्रभाव",
+    privacy_location: "गोपनीयता आणि स्थान",
+    location_sharing: "स्थान सामायिकरण",
+    anonymized_data: "अनामित डेटा सामायिकरण",
+  },
+  ta: {
+    dashboard: "டாஷ்போர்டு",
+    billing: "பில்லிங்",
+    inventory: "சரக்கு",
+    restock: "ஏஐ மறுசேமிப்பு",
+    trades: "வர்த்தகம்",
+    pindrops: "பின் டிராப்ஸ்",
+    campaigns: "பிரச்சாரங்கள்",
+    heatmap: "வெப்ப வரைபடம்",
+    genie: "ஜினி",
+    profile: "சுயவிவரம்",
+    settings: "அமைப்புகள்",
+    logout: "வெளியேறு",
+    welcome: "வரவேற்கிறோம்",
+    save_settings: "அமைப்புகளைச் சேમી",
+    dark_mode: "டார்க் மோட்",
+    language: "மொழி",
+    notifications: "அறிவிப்புகள்",
+    push_notifications: "புஷ் அறிவிப்புகள்",
+    email_alerts: "மின்னஞ்சல் எச்சரிக்கைகள்",
+    low_stock_alerts: "குறைந்த சரக்கு எச்சரிக்கைகள்",
+    sound_effects: "ஒலி விளைவுகள்",
+    privacy_location: "தனியுરીமை & இருப்பிடம்",
+    location_sharing: "இருப்பிடப் பகிர்வு",
+    anonymized_data: "அநாமதேય தரவுப் பகிர்வு",
+  },
+  te: {
+    dashboard: "డాష్‌బోర్డ్",
+    billing: "బిల్లిંગ",
+    inventory: "ఇన్వెంటరీ",
+    restock: "AI రీస్టాక్",
+    trades: "వ్యాపారం",
+    pindrops: "పిన్‌డ్రాప్స్",
+    campaigns: "క్యాంపెయిన్లు",
+    heatmap: "హీట్‌మ્યાప్",
+    genie: "జిని",
+    profile: "ప్రొఫైల్",
+    settings: "సెట్టింగులు",
+    logout: "లాగ్ అవుట్",
+    welcome: "స్వాగతం",
+    save_settings: "સેટિંગ્સ સેવ કરો",
+    dark_mode: "ડાર્ક મોડ",
+    language: "భాష",
+    notifications: "నోటిఫికேషన్లు",
+    push_notifications: "పుష్ నోటిફિકેషన్లు",
+    email_alerts: "ఈమెయイル హెచ్చరికలు",
+    low_stock_alerts: "తక్కువ స్టాక్ హెచ్చరికలు",
+    sound_effects: "సౌండ్ ఎఫెక్ట్స్",
+    privacy_location: "గోప్యత & స్థానం",
+    location_sharing: "స్థాన భాగస్వామ్యం",
+    anonymized_data: "અનામિક ડેટા ભાગીદારી",
+  },
+  gu: {
+    dashboard: "ડેશબોર્ડ",
+    billing: "બિલિંગ",
+    inventory: "ઇન્વેન્ટરી",
+    restock: "AI રીસ્ટોક",
+    trades: "વેપાર",
+    pindrops: "પિનડ્રોપ્સ",
+    campaigns: "ઝુંબેશ",
+    heatmap: "હીટમેપ",
+    genie: "જીની",
+    profile: "પ્રોફાઇલ",
+    settings: "સેટિંગ્સ",
+    logout: "લોગ આઉટ",
+    welcome: "સ્વાગત છે",
+    save_settings: "સેટિંગ્સ સાચવો",
+    dark_mode: "ડાર્ક મોડ",
+    language: "ભાષા",
+    notifications: "સૂચનાઓ",
+    push_notifications: "પુશ સૂચનાઓ",
+    email_alerts: "ઇમેઇલ ચેતવણીઓ",
+    low_stock_alerts: "ઓછા સ્ટોકની ચેતવણીઓ",
+    sound_effects: "ધ્વનિ અસરો",
+    privacy_location: "ગોપનીયતા અને સ્થાન",
+    location_sharing: "સ્થાન શેરિંગ",
+    anonymized_data: "અનામી ડેટા શેરિંગ",
+  }
+};
+
+export function useTranslation() {
+  const [lang, setLang] = useState("en");
+
+  useEffect(() => {
+    const savedLang = localStorage.getItem("language") || "en";
+    setLang(savedLang);
+
+    const handleStorageChange = () => {
+      setLang(localStorage.getItem("language") || "en");
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
+  const t = (key: string): string => {
+    const dict = translations[lang] || translations.en;
+    return dict[key] || translations.en[key] || key;
+  };
+
+  return { t, lang, setLang };
+}

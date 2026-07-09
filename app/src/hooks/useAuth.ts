@@ -1,7 +1,8 @@
 import { trpc } from "@/providers/trpc";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { LOGIN_PATH } from "@/const";
+import { supabase } from "@/lib/supabase";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -13,7 +14,6 @@ export function useAuth(options?: UseAuthOptions) {
     options ?? {};
 
   const navigate = useNavigate();
-
   const utils = trpc.useUtils();
 
   const {
@@ -26,6 +26,25 @@ export function useAuth(options?: UseAuthOptions) {
     retry: false,
   });
 
+  const [authResolving, setAuthResolving] = useState(() => {
+    // If URL contains access_token (OAuth callback), we are resolving auth state
+    return window.location.hash.includes("access_token=") || window.location.hash.includes("id_token=");
+  });
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        setAuthResolving(true);
+        refetch().finally(() => {
+          setAuthResolving(false);
+        });
+      }
+    });
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [refetch]);
+
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: async () => {
       await utils.invalidate();
@@ -33,26 +52,37 @@ export function useAuth(options?: UseAuthOptions) {
     },
   });
 
-  const logout = useCallback(() => logoutMutation.mutate(), [logoutMutation]);
+  const logout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Supabase signout failed", err);
+    }
+    logoutMutation.mutate();
+  }, [logoutMutation]);
 
   useEffect(() => {
-    if (redirectOnUnauthenticated && !isLoading && !user) {
+    if (redirectOnUnauthenticated && !isLoading && !user && !authResolving) {
+      const isCallback = window.location.hash.includes("access_token=") || window.location.hash.includes("id_token=");
+      if (isCallback) {
+        return;
+      }
       const currentPath = window.location.pathname;
       if (currentPath !== redirectPath) {
         navigate(redirectPath);
       }
     }
-  }, [redirectOnUnauthenticated, isLoading, user, navigate, redirectPath]);
+  }, [redirectOnUnauthenticated, isLoading, user, authResolving, navigate, redirectPath]);
 
   return useMemo(
     () => ({
       user: user ?? null,
       isAuthenticated: !!user,
-      isLoading: isLoading || logoutMutation.isPending,
+      isLoading: isLoading || authResolving || logoutMutation.isPending,
       error,
       logout,
       refresh: refetch,
     }),
-    [user, isLoading, logoutMutation.isPending, error, logout, refetch],
+    [user, isLoading, authResolving, logoutMutation.isPending, error, logout, refetch],
   );
 }

@@ -1,11 +1,10 @@
 import type { Context } from "hono";
 import { setCookie } from "hono/cookie";
 import * as jose from "jose";
-import * as cookie from "cookie";
 import { env } from "../lib/env";
 import { getSessionCookieOptions } from "../lib/cookies";
 import { Session } from "@contracts/constants";
-import { signSessionToken, verifySessionToken } from "./session";
+import { signSessionToken } from "./session";
 import { users as kimiUsers } from "./platform";
 import { findUserByUnionId, upsertUser } from "../queries/users";
 import type { TokenResponse } from "./types";
@@ -64,33 +63,45 @@ async function verifyAccessToken(
 }
 
 export async function authenticateRequest(headers: Headers) {
-  try {
-    const cookieStr = headers.get("cookie") || "";
-    const cookies = cookie.parse(cookieStr);
-    const token = cookies[Session.cookieName];
-    if (token) {
-      const claim = await verifySessionToken(token);
-      if (claim) {
-        const user = await findUserByUnionId(claim.unionId);
-        if (user) return user;
-      }
-    }
-  } catch (e) {
-    console.error("[auth] Token parsing failed, falling back to mock user", e);
+  const authHeader = headers.get("Authorization") || "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return undefined;
   }
+  const token = authHeader.substring(7);
+  if (!token) return undefined;
 
-  // Fallback: Always return mock developer user
-  let user = await findUserByUnionId("mock_developer");
-  if (!user) {
+  try {
+    const url = `${env.supabaseUrl}/auth/v1/user`;
+    const response = await fetch(url, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "apikey": env.supabaseAnonKey,
+      }
+    });
+
+    if (!response.ok) {
+      console.warn("[Supabase Auth] Token verification failed:", response.status);
+      return undefined;
+    }
+
+    const payload: any = await response.json();
+    const userId = payload.id;
+    if (!userId) return undefined;
+
+    // Upsert this user in TiDB Cloud MySQL to map with user tables
     await upsertUser({
-      unionId: "mock_developer",
-      name: "Local Developer",
-      avatar: "",
+      unionId: userId,
+      name: payload.user_metadata?.full_name || payload.email?.split("@")[0] || "Supabase User",
+      avatar: payload.user_metadata?.avatar_url || "",
       lastSignInAt: new Date(),
     });
-    user = await findUserByUnionId("mock_developer");
+
+    const dbUser = await findUserByUnionId(userId);
+    return dbUser || undefined;
+  } catch (err) {
+    console.error("[Supabase Auth] Request failed:", err);
+    return undefined;
   }
-  return user!;
 }
 
 export function createOAuthCallbackHandler() {

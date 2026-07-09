@@ -1,4 +1,5 @@
 import { Routes, Route } from "react-router";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Billing from "./pages/Billing";
@@ -12,27 +13,38 @@ import Genie from "./pages/Genie";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import RetailerSetup from "./pages/RetailerSetup";
+import Login from "./pages/Login";
+import SignUp from "./pages/SignUp";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import EmailVerification from "./pages/EmailVerification";
 import NotFound from "./pages/NotFound";
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Dashboard />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/billing" element={<Billing />} />
-      <Route path="/inventory" element={<Inventory />} />
-      <Route path="/restock" element={<Restock />} />
-      <Route path="/trades" element={<Trades />} />
-      <Route path="/pindrops" element={<MapPindrops />} />
-      <Route path="/campaigns" element={<Campaigns />} />
-      <Route path="/heatmap" element={<Heatmap />} />
-      <Route path="/genie" element={<Genie />} />
-      <Route path="/profile" element={<Profile />} />
-      <Route path="/settings" element={<Settings />} />
-      <Route path="/retailer/setup" element={<RetailerSetup />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<EmailVerification />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/billing" element={<Billing />} />
+        <Route path="/inventory" element={<Inventory />} />
+        <Route path="/restock" element={<Restock />} />
+        <Route path="/trades" element={<Trades />} />
+        <Route path="/pindrops" element={<MapPindrops />} />
+        <Route path="/campaigns" element={<Campaigns />} />
+        <Route path="/heatmap" element={<Heatmap />} />
+        <Route path="/genie" element={<Genie />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/retailer/setup" element={<RetailerSetup />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </ErrorBoundary>
   );
 }
 

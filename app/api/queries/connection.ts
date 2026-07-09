@@ -201,7 +201,16 @@ export function getDb() {
   }
 
   if (!instance) {
-    pool = mysql.createPool(env.databaseUrl);
+    pool = mysql.createPool({
+      uri: env.databaseUrl,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10000,
+      waitForConnections: true,
+      connectionLimit: 10,
+      maxIdle: 10,
+      idleTimeout: 60000,
+      queueLimit: 0,
+    });
     instance = drizzle(pool, {
       mode: "default",
       schema: fullSchema,

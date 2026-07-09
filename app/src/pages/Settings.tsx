@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import Navigation from "@/components/Navigation";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   Settings as SettingsIcon,
   Bell,
@@ -37,21 +38,68 @@ function Toggle({ enabled, onChange }: ToggleProps) {
 
 export default function Settings() {
   const { logout } = useAuth({ redirectOnUnauthenticated: true });
+  const { t } = useTranslation();
 
-  const [notifications, setNotifications] = useState(true);
-  const [emailAlerts, setEmailAlerts] = useState(true);
-  const [lowStockAlerts, setLowStockAlerts] = useState(true);
-  const [soundEffects, setSoundEffects] = useState(true);
-  const [autoRestock, setAutoRestock] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
-  const [locationSharing, setLocationSharing] = useState(true);
-  const [dataSharing, setDataSharing] = useState(false);
-  const [language, setLanguage] = useState("en");
+  const [notifications, setNotifications] = useState(() => localStorage.getItem("setting_notifications") !== "false");
+  const [emailAlerts, setEmailAlerts] = useState(() => localStorage.getItem("setting_emailAlerts") !== "false");
+  const [lowStockAlerts, setLowStockAlerts] = useState(() => localStorage.getItem("setting_lowStockAlerts") !== "false");
+  const [soundEffects, setSoundEffects] = useState(() => localStorage.getItem("setting_soundEffects") !== "false");
+  const [autoRestock, setAutoRestock] = useState(() => localStorage.getItem("setting_autoRestock") === "true");
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("darkMode") === "true");
+  const [locationSharing, setLocationSharing] = useState(() => localStorage.getItem("setting_locationSharing") !== "false");
+  const [dataSharing, setDataSharing] = useState(() => localStorage.getItem("setting_dataSharing") === "true");
+  const [language, setLanguage] = useState(() => localStorage.getItem("language") || "en");
   const [saved, setSaved] = useState(false);
 
+  const toggleDarkMode = () => {
+    const nextVal = !darkMode;
+    setDarkMode(nextVal);
+    if (nextVal) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("darkMode", String(nextVal));
+  };
+
+  const handleLanguageChange = (code: string) => {
+    setLanguage(code);
+    localStorage.setItem("language", code);
+    if (code !== "en") {
+      document.cookie = `googtrans=/en/${code}; path=/; SameSite=Lax`;
+    } else {
+      document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    }
+    window.dispatchEvent(new Event("storage"));
+    window.location.reload();
+  };
+
   const handleSave = () => {
+    const oldLang = localStorage.getItem("language") || "en";
+    const oldDark = localStorage.getItem("darkMode") === "true";
+
+    localStorage.setItem("setting_notifications", String(notifications));
+    localStorage.setItem("setting_emailAlerts", String(emailAlerts));
+    localStorage.setItem("setting_lowStockAlerts", String(lowStockAlerts));
+    localStorage.setItem("setting_soundEffects", String(soundEffects));
+    localStorage.setItem("setting_autoRestock", String(autoRestock));
+    localStorage.setItem("setting_locationSharing", String(locationSharing));
+    localStorage.setItem("setting_dataSharing", String(dataSharing));
+    localStorage.setItem("language", language);
+    localStorage.setItem("darkMode", String(darkMode));
+
+    // Dispatch storage event to alert other components (like Navigation)
+    window.dispatchEvent(new Event("storage"));
+
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+
+    if (oldLang !== language || oldDark !== darkMode) {
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    } else {
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
 
   return (
@@ -63,7 +111,7 @@ export default function Settings() {
           <div className="flex items-center gap-3 mb-8">
             <SettingsIcon className="w-5 h-5 text-[#474645]" />
             <h1 className="shutter-heading text-[28px]" style={{ color: "var(--color-charcoal-primary)" }}>
-              Settings
+              {t("settings")}
             </h1>
           </div>
 
@@ -71,33 +119,33 @@ export default function Settings() {
           <div className="shutter-card mb-4">
             <div className="flex items-center gap-2 mb-4">
               <Bell className="w-4 h-4 text-[#ff3e00]" />
-              <h2 className="text-[15px] font-semibold text-[#343433]">Notifications</h2>
+              <h2 className="text-[15px] font-semibold text-[#343433]">{t("notifications")}</h2>
             </div>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[13px] font-medium text-[#474645]">Push Notifications</div>
+                  <div className="text-[13px] font-medium text-[#474645]">{t("push_notifications")}</div>
                   <div className="text-[11px] text-[#848281]">Receive alerts on your device</div>
                 </div>
                 <Toggle enabled={notifications} onChange={() => setNotifications(!notifications)} />
               </div>
               <div className="border-t border-[#f2f0ed] pt-4 flex items-center justify-between">
                 <div>
-                  <div className="text-[13px] font-medium text-[#474645]">Email Alerts</div>
+                  <div className="text-[13px] font-medium text-[#474645]">{t("email_alerts")}</div>
                   <div className="text-[11px] text-[#848281]">Daily summary and important updates</div>
                 </div>
                 <Toggle enabled={emailAlerts} onChange={() => setEmailAlerts(!emailAlerts)} />
               </div>
               <div className="border-t border-[#f2f0ed] pt-4 flex items-center justify-between">
                 <div>
-                  <div className="text-[13px] font-medium text-[#474645]">Low Stock Alerts</div>
+                  <div className="text-[13px] font-medium text-[#474645]">{t("low_stock_alerts")}</div>
                   <div className="text-[11px] text-[#848281]">Get notified when inventory is low</div>
                 </div>
                 <Toggle enabled={lowStockAlerts} onChange={() => setLowStockAlerts(!lowStockAlerts)} />
               </div>
               <div className="border-t border-[#f2f0ed] pt-4 flex items-center justify-between">
                 <div>
-                  <div className="text-[13px] font-medium text-[#474645]">Sound Effects</div>
+                  <div className="text-[13px] font-medium text-[#474645]">{t("sound_effects")}</div>
                   <div className="text-[11px] text-[#848281]">Play sounds for scan and actions</div>
                 </div>
                 <Toggle enabled={soundEffects} onChange={() => setSoundEffects(!soundEffects)} />
@@ -171,7 +219,7 @@ export default function Settings() {
                   <div className="text-[13px] font-medium text-[#474645]">Dark Mode</div>
                   <div className="text-[11px] text-[#848281]">Switch to dark theme</div>
                 </div>
-                <Toggle enabled={darkMode} onChange={() => setDarkMode(!darkMode)} />
+                <Toggle enabled={darkMode} onChange={toggleDarkMode} />
               </div>
               <div className="border-t border-[#f2f0ed] pt-4">
                 <div className="text-[13px] font-medium text-[#474645] mb-2">Language</div>
@@ -186,7 +234,7 @@ export default function Settings() {
                   ].map((lang) => (
                     <button
                       key={lang.code}
-                      onClick={() => setLanguage(lang.code)}
+                      onClick={() => handleLanguageChange(lang.code)}
                       className={`py-2 rounded-lg text-[12px] font-medium transition-colors ${
                         language === lang.code
                           ? "bg-[#121212] text-white"
