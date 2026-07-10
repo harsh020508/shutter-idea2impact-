@@ -37,13 +37,24 @@ export function useAuth(options?: UseAuthOptions) {
 
   // Initialize by reading active Supabase session
   useEffect(() => {
+    const timer = setTimeout(() => {
+      if (hasLocalSession === null) {
+        console.warn("[useAuth DEBUG] Local session resolution timed out. Defaulting to false.");
+        setHasLocalSession(false);
+      }
+    }, 3000);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timer);
       console.log("[useAuth DEBUG] Initial local session resolution:", !!session);
       setHasLocalSession(!!session);
     }).catch(err => {
+      clearTimeout(timer);
       console.error("[useAuth DEBUG] Error getting session on mount:", err);
       setHasLocalSession(false);
     });
+
+    return () => clearTimeout(timer);
   }, []);
 
   // ── Logging State (User Request) ──────────────────────────────────
