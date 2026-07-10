@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { LOGIN_PATH } from "@/const";
 import { supabase } from "@/lib/supabase";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -16,83 +17,66 @@ export function useAuth(options?: UseAuthOptions) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const {
-    data: user,
-    isLoading,
-    error,
-    refetch,
-  } = trpc.auth.me.useQuery(undefined, {
-    staleTime: 1000 * 60 * 5,
-    retry: false,
-  });
-
-  const [authResolving, setAuthResolving] = useState(() => {
-    // Check both hash parameters (Implicit flow) and search parameters (PKCE flow / errors)
-    const hasHash = window.location.hash.includes("access_token=") || window.location.hash.includes("id_token=");
-    const hasSearch = window.location.search.includes("code=") || window.location.search.includes("error=");
-    return hasHash || hasSearch;
-  });
-
+  // ── Local Supabase session (fast, client-side) ────────────────
   const [hasLocalSession, setHasLocalSession] = useState<boolean | null>(null);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
 
-  // Initialize by reading active Supabase session
+  // Initialize from local Supabase session on mount
   useEffect(() => {
     const timer = setTimeout(() => {
       if (hasLocalSession === null) {
-        console.warn("[useAuth DEBUG] Local session resolution timed out. Defaulting to false.");
+        console.warn("[useAuth] Session resolution timed out. Defaulting to false.");
         setHasLocalSession(false);
+        setSupabaseUser(null);
       }
     }, 3000);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       clearTimeout(timer);
-      console.log("[useAuth DEBUG] Initial local session resolution:", !!session);
+      console.log("[useAuth] Local session resolved:", !!session, session?.user?.email);
       setHasLocalSession(!!session);
+      setSupabaseUser(session?.user ?? null);
     }).catch(err => {
       clearTimeout(timer);
-      console.error("[useAuth DEBUG] Error getting session on mount:", err);
+      console.error("[useAuth] Error getting session:", err);
       setHasLocalSession(false);
+      setSupabaseUser(null);
     });
 
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Logging State (User Request) ──────────────────────────────────
-  useEffect(() => {
-    console.log("[useAuth DEBUG] Auth State Change:", {
-      user: user ?? null,
-      isLoading,
-      authResolving,
-      hasLocalSession,
-      hash: window.location.hash,
-      search: window.location.search,
-      pathname: window.location.pathname
-    });
-
-    supabase.auth.getSession().then(({ data }) => {
-      console.log("[useAuth DEBUG] Current Supabase session:", data?.session ?? "null");
-      console.log("[useAuth DEBUG] Current Supabase user:", data?.session?.user ?? "null");
-    }).catch(err => {
-      console.error("[useAuth DEBUG] Error fetching Supabase session:", err);
-    });
-  }, [user, isLoading, authResolving, hasLocalSession]);
-
+  // Listen for auth state changes (e.g. after OAuth callback)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log(`[useAuth DEBUG] Supabase onAuthStateChange triggered: ${event}`, session);
+      console.log("[useAuth] onAuthStateChange:", event, session?.user?.email ?? "null");
       setHasLocalSession(!!session);
+      setSupabaseUser(session?.user ?? null);
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        setAuthResolving(true);
-        refetch().finally(() => {
-          setAuthResolving(false);
-        });
+        // Trigger background backend profile refresh — don't block on it
+        refetch().catch(() => {});
+      }
+      if (event === "SIGNED_OUT") {
+        refetch().catch(() => {});
       }
     });
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [refetch]);
+    return () => subscription.unsubscribe();
+  }, []);
 
+  // ── Backend profile query (slow, optional) ────────────────────
+  const {
+    data: dbUser,
+    isLoading: dbLoading,
+    error,
+    refetch,
+  } = trpc.auth.me.useQuery(undefined, {
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+    // Only run when we have a local session
+    enabled: hasLocalSession === true,
+  });
+
+  // ── Logout ────────────────────────────────────────────────────
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: async () => {
       await utils.invalidate();
@@ -109,46 +93,63 @@ export function useAuth(options?: UseAuthOptions) {
     logoutMutation.mutate();
   }, [logoutMutation]);
 
+  // ── Redirect if unauthenticated ────────────────────────────────
   useEffect(() => {
-    if (redirectOnUnauthenticated) {
-      // Do not redirect if we are checking the local session or have an active local session
-      if (hasLocalSession === null || hasLocalSession === true) {
-        return;
-      }
+    if (!redirectOnUnauthenticated) return;
 
-      // Also skip redirect if it's an active callback URL
-      const isCallback = 
-        window.location.hash.includes("access_token=") || 
-        window.location.hash.includes("id_token=") ||
-        window.location.search.includes("code=") ||
-        window.location.search.includes("error=");
+    // Still determining local session — wait
+    if (hasLocalSession === null) return;
 
-      if (isCallback) {
-        console.log("[useAuth DEBUG] Redirect to /login skipped: URL indicates callback is processing");
-        return;
-      }
+    // Valid local session — user is authenticated, don't redirect
+    if (hasLocalSession === true) return;
 
-      const currentPath = window.location.pathname;
-      if (currentPath !== redirectPath) {
-        console.warn("[useAuth DEBUG] Redirecting to /login because no local session exists:", {
-          hasLocalSession,
-          currentPath,
-          redirectPath
-        });
-        navigate(redirectPath);
-      }
+    // Skip if this is an OAuth callback URL
+    const isCallback =
+      window.location.hash.includes("access_token=") ||
+      window.location.hash.includes("id_token=") ||
+      window.location.search.includes("code=") ||
+      window.location.search.includes("error=");
+    if (isCallback) return;
+
+    const currentPath = window.location.pathname;
+    if (currentPath !== redirectPath) {
+      console.warn("[useAuth] No local session — redirecting to:", redirectPath);
+      navigate(redirectPath);
     }
   }, [redirectOnUnauthenticated, hasLocalSession, navigate, redirectPath]);
 
+  // ── Build the user object ─────────────────────────────────────
+  // Prefer DB user (has role/store info), fall back to Supabase user identity
+  const user = dbUser ?? (supabaseUser ? {
+    id: 0,
+    unionId: supabaseUser.id,
+    name: supabaseUser.user_metadata?.full_name ?? supabaseUser.email?.split("@")[0] ?? "User",
+    email: supabaseUser.email ?? null,
+    avatar: supabaseUser.user_metadata?.avatar_url ?? "",
+    role: "user" as const,
+    createdAt: new Date(supabaseUser.created_at),
+    updatedAt: new Date(),
+    lastSignInAt: new Date(),
+  } : null);
+
+  // isLoading:
+  // - true while we don't know if there's a local session yet
+  // - true while logging out
+  // - NOT blocked on the backend DB query (that loads in background)
+  const isLoading = hasLocalSession === null || logoutMutation.isPending;
+
   return useMemo(
     () => ({
-      user: user ?? null,
-      isAuthenticated: !!user,
-      isLoading: isLoading || authResolving || hasLocalSession === null || logoutMutation.isPending,
+      user,
+      isAuthenticated: hasLocalSession === true,
+      isLoading,
       error,
       logout,
       refresh: refetch,
+      dbLoading, // expose separately if pages need it
     }),
-    [user, isLoading, authResolving, hasLocalSession, logoutMutation.isPending, error, logout, refetch],
+    [user, hasLocalSession, isLoading, dbLoading, error, logout, refetch],
   );
 }
+
+
