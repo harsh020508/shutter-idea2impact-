@@ -33,12 +33,26 @@ export function useAuth(options?: UseAuthOptions) {
     return hasHash || hasSearch;
   });
 
+  const [hasLocalSession, setHasLocalSession] = useState<boolean | null>(null);
+
+  // Initialize by reading active Supabase session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("[useAuth DEBUG] Initial local session resolution:", !!session);
+      setHasLocalSession(!!session);
+    }).catch(err => {
+      console.error("[useAuth DEBUG] Error getting session on mount:", err);
+      setHasLocalSession(false);
+    });
+  }, []);
+
   // ── Logging State (User Request) ──────────────────────────────────
   useEffect(() => {
     console.log("[useAuth DEBUG] Auth State Change:", {
       user: user ?? null,
       isLoading,
       authResolving,
+      hasLocalSession,
       hash: window.location.hash,
       search: window.location.search,
       pathname: window.location.pathname
@@ -50,11 +64,12 @@ export function useAuth(options?: UseAuthOptions) {
     }).catch(err => {
       console.error("[useAuth DEBUG] Error fetching Supabase session:", err);
     });
-  }, [user, isLoading, authResolving]);
+  }, [user, isLoading, authResolving, hasLocalSession]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`[useAuth DEBUG] Supabase onAuthStateChange triggered: ${event}`, session);
+      setHasLocalSession(!!session);
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         setAuthResolving(true);
         refetch().finally(() => {
@@ -84,7 +99,13 @@ export function useAuth(options?: UseAuthOptions) {
   }, [logoutMutation]);
 
   useEffect(() => {
-    if (redirectOnUnauthenticated && !isLoading && !user && !authResolving) {
+    if (redirectOnUnauthenticated) {
+      // Do not redirect if we are checking the local session or have an active local session
+      if (hasLocalSession === null || hasLocalSession === true) {
+        return;
+      }
+
+      // Also skip redirect if it's an active callback URL
       const isCallback = 
         window.location.hash.includes("access_token=") || 
         window.location.hash.includes("id_token=") ||
@@ -98,28 +119,25 @@ export function useAuth(options?: UseAuthOptions) {
 
       const currentPath = window.location.pathname;
       if (currentPath !== redirectPath) {
-        console.warn("[useAuth DEBUG] Redirecting to /login because user is unauthenticated:", {
-          redirectOnUnauthenticated,
-          isLoading,
-          user: user ?? null,
-          authResolving,
+        console.warn("[useAuth DEBUG] Redirecting to /login because no local session exists:", {
+          hasLocalSession,
           currentPath,
           redirectPath
         });
         navigate(redirectPath);
       }
     }
-  }, [redirectOnUnauthenticated, isLoading, user, authResolving, navigate, redirectPath]);
+  }, [redirectOnUnauthenticated, hasLocalSession, navigate, redirectPath]);
 
   return useMemo(
     () => ({
       user: user ?? null,
       isAuthenticated: !!user,
-      isLoading: isLoading || authResolving || logoutMutation.isPending,
+      isLoading: isLoading || authResolving || hasLocalSession === null || logoutMutation.isPending,
       error,
       logout,
       refresh: refetch,
     }),
-    [user, isLoading, authResolving, logoutMutation.isPending, error, logout, refetch],
+    [user, isLoading, authResolving, hasLocalSession, logoutMutation.isPending, error, logout, refetch],
   );
 }
