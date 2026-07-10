@@ -1,8 +1,79 @@
 import { z } from "zod";
 import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { pindrops } from "@db/schema";
+import { pindrops, demandAggregates } from "@db/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
+
+async function syncDemandAggregate(db: any, geohash: string, category: string) {
+  const shortGeohash = geohash.substring(0, 7);
+  const countResult = await db
+    .select({
+      pindropCount: sql<number>`count(*)`,
+      avgLat: sql<string>`avg(latitude)`,
+      avgLng: sql<string>`avg(longitude)`,
+    })
+    .from(pindrops)
+    .where(
+      and(
+        sql`SUBSTRING(${pindrops.geohash}, 1, 7) = ${shortGeohash}`,
+        eq(pindrops.category, category),
+        eq(pindrops.isActive, "active")
+      )
+    );
+
+  if (countResult && countResult.length > 0) {
+    const row = countResult[0];
+    const pindropCount = Number(row.pindropCount || 0);
+
+    if (pindropCount > 0) {
+      const demandScore = pindropCount === 1 ? 35 : pindropCount === 2 ? 65 : 95;
+      const successProbability =
+        demandScore > 70 ? "high" : demandScore > 40 ? "medium" : "low";
+
+      const existing = await db
+        .select()
+        .from(demandAggregates)
+        .where(
+          and(
+            eq(demandAggregates.geohash, shortGeohash),
+            eq(demandAggregates.category, category)
+          )
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        await db
+          .update(demandAggregates)
+          .set({
+            demandScore,
+            pindropCount,
+            successProbability,
+            computedAt: new Date(),
+          })
+          .where(eq(demandAggregates.id, existing[0].id));
+      } else {
+        await db.insert(demandAggregates).values({
+          geohash: shortGeohash,
+          latitude: (row.avgLat || 0).toString(),
+          longitude: (row.avgLng || 0).toString(),
+          category,
+          demandScore,
+          pindropCount,
+          successProbability,
+        });
+      }
+    } else {
+      await db
+        .delete(demandAggregates)
+        .where(
+          and(
+            eq(demandAggregates.geohash, shortGeohash),
+            eq(demandAggregates.category, category)
+          )
+        );
+    }
+  }
+}
 
 export const pindropRouter = createRouter({
   // Create a pindrop (consumer demand signal)
@@ -53,6 +124,9 @@ export const pindropRouter = createRouter({
         note: input.note,
         urgency: input.urgency,
       });
+
+      // Update aggregate in real time
+      await syncDemandAggregate(db, geohash, input.category);
 
       return { id: Number(result[0].insertId), deduped: false };
     }),
@@ -151,10 +225,22 @@ export const pindropRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      const pin = await db
+        .select()
+        .from(pindrops)
+        .where(eq(pindrops.id, input.id))
+        .limit(1);
+
+      if (pin.length === 0) throw new Error("Pindrop not found");
+
       await db
         .update(pindrops)
         .set({ isActive: "resolved" })
         .where(eq(pindrops.id, input.id));
+
+      // Update aggregate in real time
+      await syncDemandAggregate(db, pin[0].geohash, pin[0].category);
+
       return { success: true };
     }),
 

@@ -17,7 +17,7 @@ export const env = {
   kimiOpenUrl: required("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
-  supabaseUrl: process.env.VITE_SUPABASE_URL ?? "",
-  supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY ?? "",
+  supabaseUrl: required("VITE_SUPABASE_URL"),
+  supabaseAnonKey: required("VITE_SUPABASE_ANON_KEY"),
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
 };

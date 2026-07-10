@@ -11,9 +11,8 @@ import {
   X,
   Clock,
   TrendingUp,
+  Crosshair,
 } from "lucide-react";
-
-// No fake hotspots.
 
 export default function MapPindrops() {
   const [showAdd, setShowAdd] = useState(false);
@@ -21,6 +20,9 @@ export default function MapPindrops() {
   const [category, setCategory] = useState("");
   const [urgency, setUrgency] = useState<"low" | "medium" | "high">("medium");
   const [selectedHotspot, setSelectedHotspot] = useState<any | null>(null);
+
+  const [isSelectingLocation, setIsSelectingLocation] = useState(false);
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data: trending } = trpc.pindrop.trending.useQuery({ limit: 10 });
   const { data: mapPindrops, refetch: refetchPindrops } = trpc.demand.pindropsForMap.useQuery({
@@ -35,6 +37,7 @@ export default function MapPindrops() {
       setShowAdd(false);
       setProductName("");
       setCategory("");
+      setSelectedCoords(null);
       refetchPindrops();
     },
   });
@@ -54,31 +57,76 @@ export default function MapPindrops() {
   const handleSubmit = () => {
     if (!productName || !category) return;
     
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          createPindrop.mutate({
-            productName,
-            category,
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            deviceId,
-            urgency,
-          });
-        },
-        (error) => {
-          console.error("Geolocation error:", error);
-          alert("We need your location to drop a pindrop.");
-        }
-      );
+    if (selectedCoords) {
+      createPindrop.mutate({
+        productName,
+        category,
+        latitude: selectedCoords.lat,
+        longitude: selectedCoords.lng,
+        deviceId,
+        urgency,
+      });
     } else {
-      alert("Geolocation is not supported by this browser.");
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            createPindrop.mutate({
+              productName,
+              category,
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              deviceId,
+              urgency,
+            });
+          },
+          (error) => {
+            console.error("Geolocation error:", error);
+            alert("We need your location or a map selection to drop a pindrop.");
+          }
+        );
+      } else {
+        alert("Geolocation is not supported by this browser. Please select a location on the map.");
+      }
     }
   };
 
   return (
     <div className="min-h-screen" style={{ background: "var(--color-warm-canvas)" }}>
       <Navigation />
+
+      {/* Floating selection banner */}
+      {isSelectingLocation && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[10000] bg-white rounded-full shadow-xl border border-[#f2f0ed] px-6 py-3 flex items-center gap-4 animate-in fade-in slide-in-from-top-4">
+          <span className="text-[13px] font-medium text-[#343433]">
+            {selectedCoords 
+              ? `Selected: ${selectedCoords.lat.toFixed(4)}, ${selectedCoords.lng.toFixed(4)}`
+              : "Click on the map to set pindrop location"}
+          </span>
+          <div className="flex gap-2">
+            {selectedCoords && (
+              <button
+                onClick={() => {
+                  setIsSelectingLocation(false);
+                  setShowAdd(true);
+                }}
+                className="bg-[#121212] text-white px-4 py-1.5 rounded-full text-[12px] font-medium hover:bg-[#343433] transition-colors"
+              >
+                Confirm
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setIsSelectingLocation(false);
+                setSelectedCoords(null);
+                setShowAdd(true);
+              }}
+              className="bg-[#f8f7f4] text-[#848281] px-4 py-1.5 rounded-full text-[12px] font-medium hover:bg-[#f2f0ed] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-[1200px] mx-auto">
@@ -115,6 +163,12 @@ export default function MapPindrops() {
                   pindropsData={mapPindrops || []}
                   selectedPindrop={selectedHotspot}
                   onSelectPindrop={(pindrop) => setSelectedHotspot(pindrop)}
+                  onMapClick={(lat, lng) => {
+                    if (isSelectingLocation) {
+                      setSelectedCoords({ lat, lng });
+                    }
+                  }}
+                  pendingPindropLocation={selectedCoords}
                 />
               </div>
 
@@ -144,7 +198,7 @@ export default function MapPindrops() {
                       </div>
                       <div>
                         <h3 className="text-[15px] font-semibold text-[#343433]">
-                          {selectedHotspot.product}
+                          {selectedHotspot.productName || selectedHotspot.product}
                         </h3>
                         <p className="text-[12px] text-[#848281]">{selectedHotspot.category}</p>
                       </div>
@@ -160,7 +214,7 @@ export default function MapPindrops() {
                     <div className="flex items-center gap-1.5">
                       <Search className="w-3.5 h-3.5 text-[#848281]" />
                       <span className="text-[13px] font-medium text-[#ff3e00]">
-                        {selectedHotspot.count} searches
+                        {selectedHotspot.count || 1} searches
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -273,6 +327,46 @@ export default function MapPindrops() {
                   placeholder="e.g. Dairy, Health Foods"
                   className="w-full px-3 py-2.5 rounded-xl border border-[#f2f0ed] bg-white text-[13px] focus:outline-none focus:ring-2 focus:ring-[#ff3e00]/20"
                 />
+              </div>
+
+              <div>
+                <label className="text-[12px] font-medium text-[#848281] mb-1.5 block">
+                  Location *
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSelectingLocation(true);
+                      setShowAdd(false);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl border border-[#f2f0ed] bg-[#f8f7f4] text-[#343433] text-[13px] font-medium hover:bg-[#f2f0ed] transition-colors"
+                  >
+                    {selectedCoords
+                      ? `📍 Selected: ${selectedCoords.lat.toFixed(4)}, ${selectedCoords.lng.toFixed(4)}`
+                      : "📍 Choose on Map"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => {
+                            setSelectedCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                          },
+                          (err) => {
+                            console.error(err);
+                            alert("Geolocation failed.");
+                          }
+                        );
+                      }
+                    }}
+                    className="px-3 py-2.5 rounded-xl border border-[#f2f0ed] bg-[#f8f7f4] text-[#848281] hover:bg-[#f2f0ed] transition-colors flex items-center justify-center"
+                    title="Use Current Location"
+                  >
+                    <Crosshair className="w-4.5 h-4.5" />
+                  </button>
+                </div>
               </div>
 
               <div>

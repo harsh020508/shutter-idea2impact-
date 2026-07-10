@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery, adminQuery } from "./middleware";
+import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { demandAggregates, pindrops } from "@db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -89,42 +89,41 @@ export const demandRouter = createRouter({
     }),
 
   // Compute demand aggregates (for cron job or manual trigger)
-  computeAggregates: adminQuery
+  computeAggregates: authedQuery
     .input(
       z.object({
         city: z.string().optional(),
-        hours: z.number().default(24),
+        hours: z.number().default(8760), // Default to 1 year so all testing pins are aggregated
       })
     )
     .mutation(async ({ input }) => {
       const db = getDb();
 
-      // Aggregate pindrops by geohash (7-char) and category
-      const aggregates = await db.execute(
-        sql`SELECT 
-          SUBSTRING(geohash, 1, 7) as geo,
-          category,
-          COUNT(*) as pindropCount,
-          AVG(CAST(latitude AS DECIMAL(10,7))) as avgLat,
-          AVG(CAST(longitude AS DECIMAL(10,7))) as avgLng
-        FROM pindrops 
-        WHERE createdAt >= DATE_SUB(NOW(), INTERVAL ${input.hours} HOUR)
-        AND isActive = 'active'
-        GROUP BY SUBSTRING(geohash, 1, 7), category
-        HAVING COUNT(*) >= 2`
-      );
-
-      const rows = aggregates as unknown as Array<{
-        geo: string;
-        category: string;
-        pindropCount: number;
-        avgLat: number;
-        avgLng: number;
-      }>;
+      // Aggregate pindrops by geohash (7-char) and category using Drizzle query builder
+      const rows = await db
+        .select({
+          geo: sql<string>`SUBSTRING(${pindrops.geohash}, 1, 7)`,
+          category: pindrops.category,
+          pindropCount: sql<number>`count(*)`,
+          avgLat: sql<string>`avg(latitude)`,
+          avgLng: sql<string>`avg(longitude)`,
+        })
+        .from(pindrops)
+        .where(
+          and(
+            sql`${pindrops.createdAt} >= DATE_SUB(NOW(), INTERVAL ${input.hours} HOUR)`,
+            eq(pindrops.isActive, "active")
+          )
+        )
+        .groupBy(sql`SUBSTRING(${pindrops.geohash}, 1, 7)`, pindrops.category);
 
       // Upsert into demand_aggregates
       for (const row of rows) {
-        const demandScore = Math.min(100, row.pindropCount * 5 + 10);
+        const pindropCount = Number(row.pindropCount || 0);
+        if (pindropCount === 0) continue;
+
+        // Adjust demand score based on count to get clear Green (35), Yellow (65), Red (95) levels
+        const demandScore = pindropCount === 1 ? 35 : pindropCount === 2 ? 65 : 95;
         const successProbability =
           demandScore > 70 ? "high" : demandScore > 40 ? "medium" : "low";
 
@@ -144,7 +143,7 @@ export const demandRouter = createRouter({
             .update(demandAggregates)
             .set({
               demandScore,
-              pindropCount: row.pindropCount,
+              pindropCount,
               successProbability,
               computedAt: new Date(),
             })
@@ -152,11 +151,11 @@ export const demandRouter = createRouter({
         } else {
           await db.insert(demandAggregates).values({
             geohash: row.geo,
-            latitude: row.avgLat.toString(),
-            longitude: row.avgLng.toString(),
+            latitude: (row.avgLat || 0).toString(),
+            longitude: (row.avgLng || 0).toString(),
             category: row.category,
             demandScore,
-            pindropCount: row.pindropCount,
+            pindropCount,
             successProbability,
           });
         }

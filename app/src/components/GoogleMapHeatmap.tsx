@@ -89,6 +89,8 @@ interface GoogleMapHeatmapProps {
   pindropsData?: any[];
   onSelectPindrop?: (pindrop: any) => void;
   selectedPindrop?: any;
+  onMapClick?: (lat: number, lng: number) => void;
+  pendingPindropLocation?: { lat: number; lng: number } | null;
 }
 
 export default function GoogleMapHeatmap({
@@ -97,6 +99,8 @@ export default function GoogleMapHeatmap({
   pindropsData,
   onSelectPindrop,
   selectedPindrop,
+  onMapClick,
+  pendingPindropLocation,
 }: GoogleMapHeatmapProps) {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -325,6 +329,65 @@ export default function GoogleMapHeatmap({
 
     userMarkerRef.current = marker;
   }, [userLocation]);
+
+  // ── Handle Map Click event ────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const onClick = (e: L.LeafletMouseEvent) => {
+      if (onMapClick) {
+        onMapClick(e.latlng.lat, e.latlng.lng);
+      }
+    };
+
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+    };
+  }, [onMapClick]);
+
+  // ── Draw Pending Pindrop Marker ────────────────────────────────
+  const pendingMarkerRef = useRef<L.Marker | null>(null);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (pendingMarkerRef.current) {
+      pendingMarkerRef.current.remove();
+      pendingMarkerRef.current = null;
+    }
+
+    if (pendingPindropLocation) {
+      const icon = L.divIcon({
+        className: "",
+        html: `
+          <div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+            <div style="
+              position:absolute;inset:0;
+              background:#0090ff;
+              border:2.5px solid #fff;
+              border-radius:50%;
+              box-shadow:0 2px 8px rgba(0,144,255,0.5);
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              font-size:16px;
+            ">📍</div>
+          </div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+
+      const marker = L.marker([pendingPindropLocation.lat, pendingPindropLocation.lng], { icon })
+        .addTo(map)
+        .bindPopup("Pindrop Location Chosen!");
+      
+      pendingMarkerRef.current = marker;
+      map.setView([pendingPindropLocation.lat, pendingPindropLocation.lng], map.getZoom());
+    }
+  }, [pendingPindropLocation]);
 
   // ── Render ─────────────────────────────────────────────────────
   return (
