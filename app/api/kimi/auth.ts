@@ -65,13 +65,18 @@ async function verifyAccessToken(
 export async function authenticateRequest(headers: Headers) {
   const authHeader = headers.get("Authorization") || "";
   if (!authHeader.startsWith("Bearer ")) {
+    console.log("[Supabase Auth DEBUG] No Bearer token found in Authorization header");
     return undefined;
   }
   const token = authHeader.substring(7);
-  if (!token) return undefined;
+  if (!token) {
+    console.log("[Supabase Auth DEBUG] Bearer token is empty");
+    return undefined;
+  }
 
   try {
     const url = `${env.supabaseUrl}/auth/v1/user`;
+    console.log("[Supabase Auth DEBUG] Verifying token with URL:", url);
     const response = await fetch(url, {
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -80,13 +85,19 @@ export async function authenticateRequest(headers: Headers) {
     });
 
     if (!response.ok) {
-      console.warn("[Supabase Auth] Token verification failed:", response.status);
+      console.warn("[Supabase Auth DEBUG] Token verification failed. HTTP Status:", response.status);
+      const text = await response.text().catch(() => "");
+      console.warn("[Supabase Auth DEBUG] Error response body:", text);
       return undefined;
     }
 
     const payload: any = await response.json();
     const userId = payload.id;
-    if (!userId) return undefined;
+    console.log("[Supabase Auth DEBUG] Token verified successfully. Supabase User UUID:", userId);
+    if (!userId) {
+      console.warn("[Supabase Auth DEBUG] payload.id is missing in Supabase user response");
+      return undefined;
+    }
 
     // Upsert this user in TiDB Cloud MySQL to map with user tables
     await upsertUser({
@@ -97,9 +108,10 @@ export async function authenticateRequest(headers: Headers) {
     });
 
     const dbUser = await findUserByUnionId(userId);
+    console.log("[Supabase Auth DEBUG] Database user resolved:", dbUser);
     return dbUser || undefined;
   } catch (err) {
-    console.error("[Supabase Auth] Request failed:", err);
+    console.error("[Supabase Auth DEBUG] Exception during authenticateRequest:", err);
     return undefined;
   }
 }

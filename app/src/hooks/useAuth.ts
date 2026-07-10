@@ -27,12 +27,34 @@ export function useAuth(options?: UseAuthOptions) {
   });
 
   const [authResolving, setAuthResolving] = useState(() => {
-    // If URL contains access_token (OAuth callback), we are resolving auth state
-    return window.location.hash.includes("access_token=") || window.location.hash.includes("id_token=");
+    // Check both hash parameters (Implicit flow) and search parameters (PKCE flow / errors)
+    const hasHash = window.location.hash.includes("access_token=") || window.location.hash.includes("id_token=");
+    const hasSearch = window.location.search.includes("code=") || window.location.search.includes("error=");
+    return hasHash || hasSearch;
   });
 
+  // ── Logging State (User Request) ──────────────────────────────────
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    console.log("[useAuth DEBUG] Auth State Change:", {
+      user: user ?? null,
+      isLoading,
+      authResolving,
+      hash: window.location.hash,
+      search: window.location.search,
+      pathname: window.location.pathname
+    });
+
+    supabase.auth.getSession().then(({ data }) => {
+      console.log("[useAuth DEBUG] Current Supabase session:", data?.session ?? "null");
+      console.log("[useAuth DEBUG] Current Supabase user:", data?.session?.user ?? "null");
+    }).catch(err => {
+      console.error("[useAuth DEBUG] Error fetching Supabase session:", err);
+    });
+  }, [user, isLoading, authResolving]);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log(`[useAuth DEBUG] Supabase onAuthStateChange triggered: ${event}`, session);
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         setAuthResolving(true);
         refetch().finally(() => {
@@ -63,12 +85,27 @@ export function useAuth(options?: UseAuthOptions) {
 
   useEffect(() => {
     if (redirectOnUnauthenticated && !isLoading && !user && !authResolving) {
-      const isCallback = window.location.hash.includes("access_token=") || window.location.hash.includes("id_token=");
+      const isCallback = 
+        window.location.hash.includes("access_token=") || 
+        window.location.hash.includes("id_token=") ||
+        window.location.search.includes("code=") ||
+        window.location.search.includes("error=");
+
       if (isCallback) {
+        console.log("[useAuth DEBUG] Redirect to /login skipped: URL indicates callback is processing");
         return;
       }
+
       const currentPath = window.location.pathname;
       if (currentPath !== redirectPath) {
+        console.warn("[useAuth DEBUG] Redirecting to /login because user is unauthenticated:", {
+          redirectOnUnauthenticated,
+          isLoading,
+          user: user ?? null,
+          authResolving,
+          currentPath,
+          redirectPath
+        });
         navigate(redirectPath);
       }
     }
