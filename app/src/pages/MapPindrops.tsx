@@ -13,21 +13,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-// Simulated demand hotspots for map visualization
-const HOTSPOTS = [
-  { lat: 40, lng: 30, product: "Almond Milk", category: "Dairy Alternatives", count: 42, urgency: "high" as const },
-  { lat: 25, lng: 55, product: "Premium Pet Food", category: "Pet Supplies", count: 28, urgency: "medium" as const },
-  { lat: 60, lng: 45, product: "Oat Flour", category: "Health Foods", count: 19, urgency: "medium" as const },
-  { lat: 45, lng: 70, product: "Organic Honey", category: "Health Foods", count: 35, urgency: "high" as const },
-  { lat: 70, lng: 25, product: "Quinoa Grains", category: "Health Foods", count: 15, urgency: "low" as const },
-  { lat: 35, lng: 40, product: "Plant Protein", category: "Health Foods", count: 22, urgency: "medium" as const },
-  { lat: 55, lng: 65, product: "Almond Milk", category: "Dairy Alternatives", count: 31, urgency: "high" as const },
-  { lat: 20, lng: 35, product: "Gluten-Free Bread", category: "Bakery", count: 18, urgency: "medium" as const },
-  { lat: 50, lng: 20, product: "Cold Brew Coffee", category: "Beverages", count: 24, urgency: "low" as const },
-  { lat: 65, lng: 55, product: "Premium Pet Food", category: "Pet Supplies", count: 29, urgency: "high" as const },
-  { lat: 40, lng: 60, product: "Greek Yogurt", category: "Dairy", count: 20, urgency: "medium" as const },
-  { lat: 30, lng: 50, product: "Avocado Oil", category: "Staples", count: 16, urgency: "low" as const },
-];
+// No fake hotspots.
 
 export default function MapPindrops() {
   const [showAdd, setShowAdd] = useState(false);
@@ -62,16 +48,32 @@ export default function MapPindrops() {
     return id;
   }, []);
 
+  const { data: myPindrops } = trpc.pindrop.myPindrops.useQuery({ deviceId });
+  const pindropsPlaced = myPindrops?.length || 0;
+
   const handleSubmit = () => {
     if (!productName || !category) return;
-    createPindrop.mutate({
-      productName,
-      category,
-      latitude: 19.076 + (Math.random() - 0.5) * 0.1,
-      longitude: 72.8777 + (Math.random() - 0.5) * 0.1,
-      deviceId,
-      urgency,
-    });
+    
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          createPindrop.mutate({
+            productName,
+            category,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            deviceId,
+            urgency,
+          });
+        },
+        (error) => {
+          console.error("Geolocation error:", error);
+          alert("We need your location to drop a pindrop.");
+        }
+      );
+    } else {
+      alert("Geolocation is not supported by this browser.");
+    }
   };
 
   return (
@@ -201,26 +203,8 @@ export default function MapPindrops() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {HOTSPOTS.slice(0, 8).map((spot, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between py-2 border-b border-[#f2f0ed] last:border-0"
-                      >
-                        <div>
-                          <div className="text-[13px] font-medium text-[#343433]">
-                            {spot.product}
-                          </div>
-                          <div className="text-[11px] text-[#848281]">{spot.category}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[13px] font-semibold text-[#ff3e00]">
-                            {spot.count}
-                          </div>
-                          <div className="text-[9px] text-[#c6c6c6]">searches</div>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="py-8 text-center text-[#848281] text-[13px]">
+                    No trending searches right now.
                   </div>
                 )}
               </div>
@@ -233,15 +217,15 @@ export default function MapPindrops() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-[13px]">
                     <span className="text-[#848281]">Pindrops placed</span>
-                    <span className="font-medium text-[#343433]">3</span>
+                    <span className="font-medium text-[#343433]">{pindropsPlaced}</span>
                   </div>
                   <div className="flex justify-between text-[13px]">
                     <span className="text-[#848281]">Campaigns joined</span>
-                    <span className="font-medium text-[#343433]">1</span>
+                    <span className="font-medium text-[#343433]">-</span>
                   </div>
                   <div className="flex justify-between text-[13px]">
                     <span className="text-[#848281]">Stores influenced</span>
-                    <span className="font-medium text-[#00ca48]">12</span>
+                    <span className="font-medium text-[#00ca48]">-</span>
                   </div>
                 </div>
               </div>

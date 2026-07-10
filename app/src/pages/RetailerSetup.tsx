@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
@@ -26,6 +26,20 @@ export default function RetailerSetup() {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [pincode, setPincode] = useState("");
+  const [latitude, setLatitude] = useState(19.076);
+  const [longitude, setLongitude] = useState(72.8777);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLatitude(pos.coords.latitude);
+          setLongitude(pos.coords.longitude);
+        },
+        (err) => console.error("Geolocation error:", err)
+      );
+    }
+  }, []);
 
   const registerRetailer = trpc.retailer.register.useMutation({
     onSuccess: () => {
@@ -43,8 +57,8 @@ export default function RetailerSetup() {
       city,
       state,
       pincode,
-      latitude: 19.076,
-      longitude: 72.8777,
+      latitude,
+      longitude,
     });
   };
 

@@ -7,6 +7,9 @@ const JWT_ALG = "HS256";
 export async function signSessionToken(
   payload: SessionPayload,
 ): Promise<string> {
+  if (env.isProduction && !env.appSecret) {
+    throw new Error("APP_SECRET environment variable is required in production");
+  }
   const secretStr = env.appSecret || "developer_local_secret_must_be_at_least_32_characters_long_for_hs256";
   const secret = new TextEncoder().encode(secretStr);
   return new jose.SignJWT(payload)
@@ -24,6 +27,9 @@ export async function verifySessionToken(
     return null;
   }
   try {
+    if (env.isProduction && !env.appSecret) {
+      throw new Error("APP_SECRET environment variable is required in production");
+    }
     const secretStr = env.appSecret || "developer_local_secret_must_be_at_least_32_characters_long_for_hs256";
     const secret = new TextEncoder().encode(secretStr);
     const { payload } = await jose.jwtVerify(token, secret, {

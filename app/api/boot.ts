@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
@@ -10,6 +12,14 @@ import { Paths } from "@contracts/constants";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
+app.use(secureHeaders());
+app.use(
+  "/api/*",
+  cors({
+    origin: (origin) => origin, // In a real production app, restrict this to your domain
+    credentials: true,
+  })
+);
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 
@@ -22,7 +32,7 @@ app.post("/api/auth/google", async (c) => {
 
     // Verify token with Google's public endpoint or use mock in local development
     let payload: any;
-    if (idToken.startsWith("mock_google_token")) {
+    if (!env.isProduction && idToken.startsWith("mock_google_token")) {
       const email = idToken.split(":")[1] || "harshssingh020508@gmail.com";
       const name = email.split("@")[0].split(".").map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
       payload = {

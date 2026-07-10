@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { demandAggregates, pindrops } from "@db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -89,7 +89,7 @@ export const demandRouter = createRouter({
     }),
 
   // Compute demand aggregates (for cron job or manual trigger)
-  computeAggregates: publicQuery
+  computeAggregates: adminQuery
     .input(
       z.object({
         city: z.string().optional(),

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery, authedQuery } from "./middleware";
+import { createRouter, publicQuery, authedQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { retailers } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
@@ -140,7 +140,7 @@ export const retailerRouter = createRouter({
     }),
 
   // Verify GSTIN (admin or automated)
-  verifyGstin: authedQuery
+  verifyGstin: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();

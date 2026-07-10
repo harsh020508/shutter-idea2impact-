@@ -218,8 +218,29 @@ export const tradeRouter = createRouter({
   // Cancel trade
   cancel: authedQuery
     .input(z.object({ tradeId: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const db = getDb();
+      
+      const myRetailer = await db
+        .select()
+        .from(retailers)
+        .where(eq(retailers.userId, ctx.user.id))
+        .limit(1);
+
+      if (myRetailer.length === 0) throw new Error("Retailer not found");
+
+      const trade = await db
+        .select()
+        .from(tradeOpportunities)
+        .where(eq(tradeOpportunities.id, input.tradeId))
+        .limit(1);
+
+      if (trade.length === 0) throw new Error("Trade not found");
+      
+      if (trade[0].sellerRetailerId !== myRetailer[0].id && trade[0].buyerRetailerId !== myRetailer[0].id) {
+        throw new Error("Unauthorized to cancel this trade");
+      }
+
       await db
         .update(tradeOpportunities)
         .set({ status: "cancelled" })

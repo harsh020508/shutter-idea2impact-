@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { pindrops } from "@db/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
@@ -147,7 +147,7 @@ export const pindropRouter = createRouter({
     }),
 
   // Resolve a pindrop
-  resolve: publicQuery
+  resolve: authedQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
