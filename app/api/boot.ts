@@ -1,7 +1,10 @@
 import { Hono } from "hono";
+import { sql } from "drizzle-orm";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
+import { etag } from "hono/etag";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
@@ -10,20 +13,74 @@ import { env } from "./lib/env";
 import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
 
+// Simple in-memory rate limiter
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function rateLimit(opts: { windowMs: number; max: number }) {
+  return async (c: any, next: any) => {
+    const ip =
+      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+      c.req.header("x-real-ip") ||
+      "unknown";
+    const key = `${ip}:${c.req.path}`;
+    const now = Date.now();
+    const entry = rateLimitStore.get(key);
+
+    if (!entry || now > entry.resetAt) {
+      rateLimitStore.set(key, { count: 1, resetAt: now + opts.windowMs });
+      await next();
+      return;
+    }
+
+    if (entry.count >= opts.max) {
+      return c.json({ error: "Too many requests, please try again later" }, 429);
+    }
+
+    entry.count++;
+    await next();
+  };
+}
+
+// Clean up expired entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitStore) {
+    if (now > entry.resetAt) rateLimitStore.delete(key);
+  }
+}, 5 * 60 * 1000).unref?.();
+
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(secureHeaders());
 app.use(
   "/api/*",
   cors({
-    origin: (origin) => origin, // In a real production app, restrict this to your domain
+    origin: (origin) => {
+      if (env.allowedOrigins.includes(origin)) {
+        return origin;
+      }
+      return env.allowedOrigins[0] ?? "";
+    },
     credentials: true,
   })
 );
-app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+app.use(csrf());
+app.use(bodyLimit({ maxSize: 2 * 1024 * 1024 }));
+
+// ETag support for cache validation
+app.use("/api/*", etag());
+
+// Cache-Control headers for public GET endpoints
+app.use("/api/trpc/*", async (c, next) => {
+  await next();
+  if (c.req.method === "GET" && c.res.status === 200) {
+    c.res.headers.set("Cache-Control", "public, max-age=300");
+  }
+});
+
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 
-app.post("/api/auth/google", async (c) => {
+app.post("/api/auth/google", rateLimit({ windowMs: 60_000, max: 10 }), async (c) => {
   try {
     const { idToken } = await c.req.json();
     if (!idToken) {
@@ -89,6 +146,7 @@ app.post("/api/auth/google", async (c) => {
   }
 });
 
+app.use("/api/trpc/*", rateLimit({ windowMs: 60_000, max: 30 }));
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
@@ -99,6 +157,32 @@ app.use("/api/trpc/*", async (c) => {
 });
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
+// Health check endpoint
+app.get("/health", (c) => {
+  return c.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || "1.0.0",
+  });
+});
+
+// Readiness probe - checks database connection
+app.get("/readyz", async (c) => {
+  try {
+    const { getDb } = await import("./queries/connection");
+    const db = getDb();
+    // Simple query to verify DB connection
+    await db.execute(sql`SELECT 1`);
+    return c.json({ status: "ready", timestamp: new Date().toISOString() });
+  } catch (error) {
+    return c.json(
+      { status: "not_ready", error: String(error), timestamp: new Date().toISOString() },
+      503
+    );
+  }
+});
+
 export default app;
 
 if (env.isProduction && !process.env.VERCEL) {
@@ -107,7 +191,36 @@ if (env.isProduction && !process.env.VERCEL) {
   serveStaticFiles(app);
 
   const port = parseInt(process.env.PORT || "3000");
-  serve({ fetch: app.fetch, port }, () => {
+  const server = serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // Graceful shutdown
+  const shutdown = async (signal: string) => {
+    console.log(`\n[${signal}] Shutting down gracefully...`);
+
+    // Close database pool
+    try {
+      const { closePool } = await import("./queries/connection");
+      await closePool();
+      console.log("[shutdown] Database pool closed");
+    } catch (err) {
+      console.error("[shutdown] Error closing database pool:", err);
+    }
+
+    // Close HTTP server
+    server.close(() => {
+      console.log("[shutdown] HTTP server closed");
+      process.exit(0);
+    });
+
+    // Force exit after 10 seconds if graceful shutdown hangs
+    setTimeout(() => {
+      console.error("[shutdown] Forced exit after timeout");
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }

@@ -3,6 +3,7 @@ import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { pindrops, demandAggregates } from "@db/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
+import { encodeGeohash } from "./lib/geohash";
 
 async function syncDemandAggregate(db: any, geohash: string, category: string) {
   const shortGeohash = geohash.substring(0, 7);
@@ -80,12 +81,12 @@ export const pindropRouter = createRouter({
   create: publicQuery
     .input(
       z.object({
-        productName: z.string().min(1),
-        category: z.string().min(1),
+        productName: z.string().min(1).max(200),
+        category: z.string().min(1).max(100),
         latitude: z.number(),
         longitude: z.number(),
-        deviceId: z.string().min(1),
-        note: z.string().optional(),
+        deviceId: z.string().min(1).max(100),
+        note: z.string().max(500).optional(),
         urgency: z.enum(["low", "medium", "high"]).default("medium"),
       })
     )
@@ -246,7 +247,7 @@ export const pindropRouter = createRouter({
 
   // Get my pindrops by device
   myPindrops: publicQuery
-    .input(z.object({ deviceId: z.string() }))
+    .input(z.object({ deviceId: z.string().max(100) }))
     .query(async ({ input }) => {
       const db = getDb();
       return db
@@ -256,48 +257,3 @@ export const pindropRouter = createRouter({
         .orderBy(desc(pindrops.createdAt));
     }),
 });
-
-// Simple geohash encoder
-function encodeGeohash(lat: number, lon: number, precision: number): string {
-  const base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-  let idx = 0;
-  let bit = 0;
-  let evenBit = true;
-  let geohash = "";
-
-  let latRange = [-90.0, 90.0];
-  let lonRange = [-180.0, 180.0];
-
-  while (geohash.length < precision) {
-    if (evenBit) {
-      const mid = (lonRange[0] + lonRange[1]) / 2;
-      if (lon >= mid) {
-        idx = idx * 2 + 1;
-        lonRange[0] = mid;
-      } else {
-        idx = idx * 2;
-        lonRange[1] = mid;
-      }
-    } else {
-      const mid = (latRange[0] + latRange[1]) / 2;
-      if (lat >= mid) {
-        idx = idx * 2 + 1;
-        latRange[0] = mid;
-      } else {
-        idx = idx * 2;
-        latRange[1] = mid;
-      }
-    }
-
-    evenBit = !evenBit;
-    bit++;
-
-    if (bit === 5) {
-      geohash += base32[idx];
-      bit = 0;
-      idx = 0;
-    }
-  }
-
-  return geohash;
-}

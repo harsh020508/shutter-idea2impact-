@@ -44,7 +44,14 @@ export const tradeRouter = createRouter({
   }),
 
   // Find matches for my surplus inventory
-  findMatches: authedQuery.query(async ({ ctx }) => {
+  findMatches: authedQuery
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(50).default(20),
+        offset: z.number().int().min(0).default(0),
+      })
+    )
+    .query(async ({ ctx, input }) => {
     const db = getDb();
     const myRetailer = await db
       .select()
@@ -95,6 +102,10 @@ export const tradeRouter = createRouter({
         )
       );
 
+    // Get seller's coordinates for distance calculation
+    const sellerLat = parseFloat(myRetailer[0].latitude || "0") || 0;
+    const sellerLng = parseFloat(myRetailer[0].longitude || "0") || 0;
+
     // Calculate match scores
     const matches = potentialBuyers
       .map((buyer: any) => {
@@ -103,7 +114,13 @@ export const tradeRouter = createRouter({
         );
         if (!surplusItem) return null;
 
-        const geoScore = 35;
+        // Calculate actual distance using Haversine formula
+        const buyerLat = parseFloat(buyer.retailer.latitude) || 0;
+        const buyerLng = parseFloat(buyer.retailer.longitude) || 0;
+        const distance = haversineDistance(sellerLat, sellerLng, buyerLat, buyerLng);
+
+        // Geo score: closer = higher score (max 50, decreases with distance)
+        const geoScore = Math.max(0, 50 - distance * 5);
         const productScore = 25;
         const priceScore = 20;
         const expiryScore = surplusItem.inventory.expiryDate ? 20 : 10;
@@ -124,13 +141,15 @@ export const tradeRouter = createRouter({
               0
           ),
           matchScore: Math.min(100, matchScore),
-          distance: 3.5,
+          distance,
           status: "pending" as const,
         };
       })
       .filter((m: any): m is NonNullable<typeof m> => m !== null);
 
-    return matches.sort((a: any, b: any) => b.matchScore - a.matchScore);
+    return matches
+      .sort((a: any, b: any) => b.matchScore - a.matchScore)
+      .slice(input.offset, input.offset + input.limit);
   }),
 
   // Create a trade opportunity
@@ -198,6 +217,24 @@ export const tradeRouter = createRouter({
 
       if (trade.length === 0) throw new Error("Trade not found");
 
+      const retailerId = myRetailer[0].id;
+
+      // Verify caller is a party to this trade
+      if (
+        trade[0].sellerRetailerId !== retailerId &&
+        trade[0].buyerRetailerId !== retailerId
+      ) {
+        throw new Error("Unauthorized: you are not a party to this trade");
+      }
+
+      // Verify the claimed role matches actual position
+      if (input.role === "seller" && trade[0].sellerRetailerId !== retailerId) {
+        throw new Error("Unauthorized: you are not the seller in this trade");
+      }
+      if (input.role === "buyer" && trade[0].buyerRetailerId !== retailerId) {
+        throw new Error("Unauthorized: you are not the buyer in this trade");
+      }
+
       let newStatus = trade[0].status;
       if (input.role === "seller") {
         if (trade[0].status === "buyer_confirmed") newStatus = "completed";
@@ -248,3 +285,34 @@ export const tradeRouter = createRouter({
       return { success: true };
     }),
 });
+
+/**
+ * Calculate the distance between two points on Earth using the Haversine formula.
+ * @param lat1 - Latitude of point 1 in degrees
+ * @param lon1 - Longitude of point 1 in degrees
+ * @param lat2 - Latitude of point 2 in degrees
+ * @param lon2 - Longitude of point 2 in degrees
+ * @returns Distance in kilometers
+ */
+function haversineDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function toRadians(degrees: number): number {
+  return degrees * (Math.PI / 180);
+}

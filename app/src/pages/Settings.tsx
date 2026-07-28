@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import Navigation from "@/components/Navigation";
-import { useTranslation } from "@/hooks/useTranslation";
+import { useTranslation, dispatchLanguageChange } from "@/hooks/useTranslation";
 import {
   Settings as SettingsIcon,
   Bell,
@@ -64,13 +64,12 @@ export default function Settings() {
 
   const handleLanguageChange = (code: string) => {
     setLanguage(code);
-    localStorage.setItem("language", code);
     if (code !== "en") {
       document.cookie = `googtrans=/en/${code}; path=/; SameSite=Lax`;
     } else {
       document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     }
-    window.dispatchEvent(new Event("storage"));
+    dispatchLanguageChange(code);
     window.location.reload();
   };
 
@@ -85,11 +84,8 @@ export default function Settings() {
     localStorage.setItem("setting_autoRestock", String(autoRestock));
     localStorage.setItem("setting_locationSharing", String(locationSharing));
     localStorage.setItem("setting_dataSharing", String(dataSharing));
-    localStorage.setItem("language", language);
+    dispatchLanguageChange(language);
     localStorage.setItem("darkMode", String(darkMode));
-
-    // Dispatch storage event to alert other components (like Navigation)
-    window.dispatchEvent(new Event("storage"));
 
     setSaved(true);
 

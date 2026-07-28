@@ -15,7 +15,7 @@ import {
 export default function Trades() {
   const { isAuthenticated } = useAuth({ redirectOnUnauthenticated: true });
 
-  const { data: matches, refetch } = trpc.trade.findMatches.useQuery(undefined, {
+  const { data: matches, refetch } = trpc.trade.findMatches.useQuery({}, {
     enabled: isAuthenticated,
   });
 

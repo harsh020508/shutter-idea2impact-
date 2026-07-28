@@ -40,3 +40,34 @@ function requireRole(role: string) {
 
 export const authedQuery = t.procedure.use(requireAuth);
 export const adminQuery = authedQuery.use(requireRole("admin"));
+
+// Retailer-scoped middleware: resolves user -> retailer, caches in context
+const withRetailer = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+
+  if (!ctx.user) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: ErrorMessages.unauthenticated,
+    });
+  }
+
+  // Use cached retailer if already resolved in this request
+  if ((ctx as any)._retailer) {
+    return next({
+      ctx: { ...ctx, user: ctx.user, retailer: (ctx as any)._retailer },
+    });
+  }
+
+  const { resolveRetailer } = await import("./middleware/retailer");
+  const retailer = await resolveRetailer(ctx.user.id);
+
+  // Cache on context for reuse within the same request
+  (ctx as any)._retailer = retailer;
+
+  return next({
+    ctx: { ...ctx, user: ctx.user, retailer },
+  });
+});
+
+export const retailerQuery = authedQuery.use(withRetailer);

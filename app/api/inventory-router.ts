@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { inventory, products, restockRecommendations, retailers } from "@db/schema";
+import type { Product, InventoryItem } from "@db/schema";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 
 export const inventoryRouter = createRouter({
@@ -90,7 +91,7 @@ export const inventoryRouter = createRouter({
         sellingPrice: z.number().optional(),
         surplusFlag: z.enum(["normal", "surplus", "dead_stock"]).default("normal"),
         surplusQuantity: z.number().int().default(0),
-        expiryDate: z.string().optional(),
+        expiryDate: z.string().max(30).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -176,7 +177,7 @@ export const inventoryRouter = createRouter({
 
   // Scan product by barcode
   scanProductByBarcode: authedQuery
-    .input(z.object({ barcode: z.string() }))
+    .input(z.object({ barcode: z.string().max(50) }))
     .query(async ({ ctx, input }) => {
       const db = getDb();
       const myRetailer = await db
@@ -217,7 +218,7 @@ export const inventoryRouter = createRouter({
 
   // Search products for billing with local store inventory details
   searchBillingProducts: authedQuery
-    .input(z.object({ query: z.string() }))
+    .input(z.object({ query: z.string().max(200) }))
     .query(async ({ ctx, input }) => {
       const db = getDb();
       const myRetailer = await db
@@ -239,7 +240,7 @@ export const inventoryRouter = createRouter({
 
       if (matchedProducts.length === 0) return [];
 
-      const productIds = matchedProducts.map((p: any) => p.id);
+      const productIds = matchedProducts.map((p: Product) => p.id);
 
       const invRows = await db
         .select()
@@ -251,8 +252,8 @@ export const inventoryRouter = createRouter({
           )
         );
 
-      return matchedProducts.map((p: any) => {
-        const inv = invRows.find((i: any) => i.productId === p.id);
+      return matchedProducts.map((p: Product) => {
+        const inv = invRows.find((i: InventoryItem) => i.productId === p.id);
         return {
           product: p,
           inventoryItem: inv ?? null,
@@ -262,7 +263,7 @@ export const inventoryRouter = createRouter({
 
   // Search products
   searchProducts: publicQuery
-    .input(z.object({ query: z.string(), category: z.string().optional() }))
+    .input(z.object({ query: z.string().max(200), category: z.string().max(100).optional() }))
     .query(async ({ input }) => {
       const db = getDb();
       const searchTerm = `%${input.query.toLowerCase()}%`;
@@ -291,7 +292,7 @@ export const inventoryRouter = createRouter({
     const rows = await db
       .selectDistinct({ category: products.category })
       .from(products);
-    return rows.map((r: any) => r.category);
+    return rows.map((r: { category: string }) => r.category);
   }),
 
   // AI Restock: Generate recommendations
@@ -319,8 +320,8 @@ export const inventoryRouter = createRouter({
 
     // Generate AI recommendations based on stock levels and sales velocity
     const recommendations = items
-      .filter((item: any) => item.inventory.quantity <= item.inventory.lowStockThreshold * 2)
-      .map((item: any) => {
+      .filter((item: { inventory: InventoryItem; product: Product }) => item.inventory.quantity <= item.inventory.lowStockThreshold * 2)
+      .map((item: { inventory: InventoryItem; product: Product }) => {
         const stockRatio = item.inventory.quantity / item.inventory.lowStockThreshold;
         const confidence = Math.min(95, Math.max(50, 100 - stockRatio * 30));
         const recommendedQty = Math.ceil(
@@ -343,34 +344,43 @@ export const inventoryRouter = createRouter({
           reason,
         };
       })
-      .sort((a: any, b: any) => b.confidence - a.confidence)
+      .sort((a: { confidence: number }, b: { confidence: number }) => b.confidence - a.confidence)
       .slice(0, 10);
 
-    // Persist recommendations
-    for (const rec of recommendations) {
-      const existing = await db
-        .select()
+    // Persist recommendations - batch operation to avoid N+1
+    if (recommendations.length > 0) {
+      const productIds = recommendations.map(r => r.productId);
+
+      // Fetch all existing pending recommendations in a single query
+      const existingPending = await db
+        .select({ productId: restockRecommendations.productId })
         .from(restockRecommendations)
         .where(
           and(
             eq(restockRecommendations.retailerId, retailerId),
-            eq(restockRecommendations.productId, rec.productId),
+            inArray(restockRecommendations.productId, productIds),
             eq(restockRecommendations.status, "pending")
           )
-        )
-        .limit(1);
+        );
 
-      if (existing.length === 0) {
-        await db.insert(restockRecommendations).values({
-          retailerId,
-          productId: rec.productId,
-          currentStock: rec.currentStock,
-          recommendedQuantity: rec.recommendedQuantity,
-          predictedDemand: rec.predictedDemand,
-          confidence: rec.confidence.toString(),
-          reason: rec.reason,
-          status: "pending",
-        });
+      const existingProductIds = new Set(existingPending.map(e => e.productId));
+
+      // Filter to only new recommendations and batch insert
+      const newRecs = recommendations.filter(r => !existingProductIds.has(r.productId));
+
+      if (newRecs.length > 0) {
+        await db.insert(restockRecommendations).values(
+          newRecs.map(rec => ({
+            retailerId,
+            productId: rec.productId,
+            currentStock: rec.currentStock,
+            recommendedQuantity: rec.recommendedQuantity,
+            predictedDemand: rec.predictedDemand,
+            confidence: rec.confidence.toString(),
+            reason: rec.reason,
+            status: "pending" as const,
+          }))
+        );
       }
     }
 

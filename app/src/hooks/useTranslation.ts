@@ -54,7 +54,7 @@ const translations: Record<string, Record<string, string>> = {
     anonymized_data: "अनाम डेटा साझा करना",
   },
   mr: {
-    dashboard: "डॅशボード",
+    dashboard: "डॅशबोर्ड",
     billing: "बिलिंग",
     inventory: "इन्वेंटरी",
     restock: "एआय रीस्टॉक",
@@ -159,19 +159,35 @@ const translations: Record<string, Record<string, string>> = {
   }
 };
 
+export function dispatchLanguageChange(newLang: string) {
+  localStorage.setItem("language", newLang);
+  document.documentElement.lang = newLang;
+  window.dispatchEvent(new CustomEvent("languageChange", { detail: newLang }));
+}
+
 export function useTranslation() {
   const [lang, setLang] = useState("en");
 
   useEffect(() => {
     const savedLang = localStorage.getItem("language") || "en";
     setLang(savedLang);
+    document.documentElement.lang = savedLang;
 
-    const handleStorageChange = () => {
-      setLang(localStorage.getItem("language") || "en");
+    const handleLanguageChange = () => {
+      const newLang = localStorage.getItem("language") || "en";
+      setLang(newLang);
+      document.documentElement.lang = newLang;
     };
 
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    // Listen for cross-tab storage changes
+    window.addEventListener("storage", handleLanguageChange);
+    // Listen for same-tab language changes via custom event
+    window.addEventListener("languageChange", handleLanguageChange);
+
+    return () => {
+      window.removeEventListener("storage", handleLanguageChange);
+      window.removeEventListener("languageChange", handleLanguageChange);
+    };
   }, []);
 
   const t = (key: string): string => {

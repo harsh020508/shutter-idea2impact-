@@ -3,25 +3,26 @@ import { createRouter, publicQuery, authedQuery, adminQuery } from "./middleware
 import { getDb } from "./queries/connection";
 import { retailers } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { encodeGeohash } from "./lib/geohash";
 
 export const retailerRouter = createRouter({
   // Register a new retailer
   register: authedQuery
     .input(
       z.object({
-        storeName: z.string().min(1),
-        ownerName: z.string().min(1),
+        storeName: z.string().min(1).max(100),
+        ownerName: z.string().min(1).max(100),
         gstin: z.string().length(15),
-        phone: z.string().optional(),
-        email: z.string().email().optional(),
-        address: z.string().optional(),
-        city: z.string().optional(),
-        state: z.string().optional(),
-        pincode: z.string().optional(),
+        phone: z.string().max(15).optional(),
+        email: z.string().email().max(255).optional(),
+        address: z.string().max(500).optional(),
+        city: z.string().max(100).optional(),
+        state: z.string().max(100).optional(),
+        pincode: z.string().max(10).optional(),
         latitude: z.number().optional(),
         longitude: z.number().optional(),
         catchmentRadius: z.number().default(5),
-        upiId: z.string().optional(),
+        upiId: z.string().max(100).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -96,17 +97,17 @@ export const retailerRouter = createRouter({
     .input(
       z.object({
         id: z.number(),
-        storeName: z.string().optional(),
-        ownerName: z.string().optional(),
-        phone: z.string().optional(),
-        address: z.string().optional(),
-        city: z.string().optional(),
-        state: z.string().optional(),
-        pincode: z.string().optional(),
+        storeName: z.string().max(100).optional(),
+        ownerName: z.string().max(100).optional(),
+        phone: z.string().max(15).optional(),
+        address: z.string().max(500).optional(),
+        city: z.string().max(100).optional(),
+        state: z.string().max(100).optional(),
+        pincode: z.string().max(10).optional(),
         latitude: z.number().optional(),
         longitude: z.number().optional(),
         catchmentRadius: z.number().optional(),
-        upiId: z.string().optional(),
+        upiId: z.string().max(100).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -180,17 +181,17 @@ export const retailerRouter = createRouter({
     const retailerId = myRetailer[0].id;
 
     // Get counts from related tables
-    const lowStockResult = await db.execute(
-      sql`SELECT COUNT(*) as cnt FROM inventory WHERE retailerId = ${retailerId} AND quantity <= lowStockThreshold`
-    );
-
-    const totalResult = await db.execute(
-      sql`SELECT COUNT(*) as cnt FROM inventory WHERE retailerId = ${retailerId}`
-    );
-
-    const billsResult = await db.execute(
-      sql`SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as rev FROM bills WHERE retailerId = ${retailerId} AND DATE(createdAt) = CURDATE()`
-    );
+    const [lowStockResult, totalResult, billsResult] = await Promise.all([
+      db.execute(
+        sql`SELECT COUNT(*) as cnt FROM inventory WHERE retailerId = ${retailerId} AND quantity <= lowStockThreshold`
+      ),
+      db.execute(
+        sql`SELECT COUNT(*) as cnt FROM inventory WHERE retailerId = ${retailerId}`
+      ),
+      db.execute(
+        sql`SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as rev FROM bills WHERE retailerId = ${retailerId} AND DATE(createdAt) = CURDATE()`
+      ),
+    ]);
 
     const lowRows = lowStockResult as unknown as Array<{ cnt: number }>;
     const totalRows = totalResult as unknown as Array<{ cnt: number }>;
@@ -205,48 +206,3 @@ export const retailerRouter = createRouter({
     };
   }),
 });
-
-// Simple geohash encoder
-function encodeGeohash(lat: number, lon: number, precision: number): string {
-  const base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-  let idx = 0;
-  let bit = 0;
-  let evenBit = true;
-  let geohash = "";
-
-  let latRange = [-90.0, 90.0];
-  let lonRange = [-180.0, 180.0];
-
-  while (geohash.length < precision) {
-    if (evenBit) {
-      const mid = (lonRange[0] + lonRange[1]) / 2;
-      if (lon >= mid) {
-        idx = idx * 2 + 1;
-        lonRange[0] = mid;
-      } else {
-        idx = idx * 2;
-        lonRange[1] = mid;
-      }
-    } else {
-      const mid = (latRange[0] + latRange[1]) / 2;
-      if (lat >= mid) {
-        idx = idx * 2 + 1;
-        latRange[0] = mid;
-      } else {
-        idx = idx * 2;
-        latRange[1] = mid;
-      }
-    }
-
-    evenBit = !evenBit;
-    bit++;
-
-    if (bit === 5) {
-      geohash += base32[idx];
-      bit = 0;
-      idx = 0;
-    }
-  }
-
-  return geohash;
-}

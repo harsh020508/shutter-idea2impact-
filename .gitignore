@@ -1,0 +1,5 @@
+
+# Security - never commit these
+tatus
+*.log
+.DS_Store

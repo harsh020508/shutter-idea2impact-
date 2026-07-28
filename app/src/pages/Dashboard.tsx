@@ -27,27 +27,32 @@ export default function Dashboard() {
 
   const { data: retailer } = trpc.retailer.myRetailer.useQuery(undefined, {
     enabled: isAuthenticated,
+    staleTime: 60_000,
   });
 
   const { data: stats } = trpc.retailer.dashboardStats.useQuery(undefined, {
     enabled: isAuthenticated,
+    staleTime: 60_000,
   });
 
   const { data: todayRevenue } = trpc.bill.todayRevenue.useQuery(undefined, {
     enabled: isAuthenticated,
+    staleTime: 60_000,
   });
 
   const { data: lowStock } = trpc.inventory.lowStock.useQuery(undefined, {
     enabled: isAuthenticated,
+    staleTime: 60_000,
   });
 
   const { data: trending } = trpc.pindrop.trending.useQuery(
     { hours: 24, limit: 5 },
-    { enabled: isAuthenticated }
+    { enabled: isAuthenticated, staleTime: 60_000 }
   );
 
   const { data: insights } = trpc.genie.quickInsights.useQuery(undefined, {
     enabled: isAuthenticated,
+    staleTime: 60_000,
   });
 
   useEffect(() => {

@@ -2,18 +2,29 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { genieQueries, retailers, demandAggregates } from "@db/schema";
+import type { DemandAggregate } from "@db/schema";
 import { eq, desc } from "drizzle-orm";
+
+interface GeminiCandidate {
+  content?: {
+    parts?: Array<{ text?: string }>;
+  };
+}
+
+interface GeminiResponse {
+  candidates?: GeminiCandidate[];
+}
 
 export const genieRouter = createRouter({
   // Ask Genie a question
   ask: authedQuery
     .input(
       z.object({
-        query: z.string().min(1),
+        query: z.string().min(1).max(1000),
         locationContext: z
           .object({
-            city: z.string().optional(),
-            pincode: z.string().optional(),
+            city: z.string().max(100).optional(),
+            pincode: z.string().max(10).optional(),
             radius: z.number().default(5),
           })
           .optional(),
@@ -44,53 +55,58 @@ export const genieRouter = createRouter({
 Store Name: ${storeName}
 Location: ${city}
 Top local demand categories (crowdsourced):
-${demandData.map((d: any) => `- ${d.category} (Demand Score: ${d.demandScore}/100)`).join("\n")}
+${demandData.map((d: DemandAggregate) => `- ${d.category} (Demand Score: ${d.demandScore}/100)`).join("\n")}
 `;
 
 
 
       let aiResponse = "";
-      try {
-        const apiKey = process.env.GEMINI_API_KEY || "";
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn("[Gemini] GEMINI_API_KEY not set, skipping AI call");
+      } else {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+          const response = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            signal: AbortSignal.timeout(15_000),
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: input.query
+                    }
+                  ]
+                }
+              ],
+              systemInstruction: {
                 parts: [
                   {
-                    text: input.query
-                  }
-                ]
-              }
-            ],
-            systemInstruction: {
-              parts: [
-                {
-                  text: `You are Genie, a smart retail AI assistant for the Shutter platform.
+                    text: `You are Genie, a smart retail AI assistant for the Shutter platform.
 You are helping the store owner of "${storeName}" located in ${city}.
 Use the following local market context to inform your advice if relevant:
 ${contextString}
 
 Provide a helpful, direct, and concise response to the owner's query in 3-4 sentences. Respond to whatever they ask directly and clearly.`
-                }
-              ]
-            }
-          }),
-        });
+                  }
+                ]
+              }
+            }),
+          });
 
-        if (response.ok) {
-          const data: any = await response.json();
-          aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        } else {
-          console.error("[Gemini] API returned status", response.status, await response.text());
+          if (response.ok) {
+            const data: GeminiResponse = await response.json();
+            aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          } else {
+            console.error("[Gemini] API returned status", response.status, await response.text());
+          }
+        } catch (err) {
+          console.error("[Gemini] request failed", err);
         }
-      } catch (err) {
-        console.error("[Gemini] request failed", err);
       }
 
       if (!aiResponse) {
@@ -98,7 +114,7 @@ Provide a helpful, direct, and concise response to the owner's query in 3-4 sent
       }
 
       const insights = {
-        topCategories: demandData.map((d: any) => ({
+        topCategories: demandData.map((d: DemandAggregate) => ({
           category: d.category,
           score: d.demandScore,
         })),
@@ -171,7 +187,7 @@ Provide a helpful, direct, and concise response to the owner's query in 3-4 sent
       tip: topCategory
         ? `Demand score of ${topCategory.demandScore}/100. Consider adding ${topCategory.category} items to capture this opportunity.`
         : "Keep monitoring demand trends and community campaigns for new opportunities.",
-      topCategories: topDemand.map((d: any) => ({
+      topCategories: topDemand.map((d: DemandAggregate) => ({
         category: d.category,
         score: d.demandScore,
         trend: d.demandScore > 70 ? "up" : d.demandScore > 40 ? "stable" : "low",

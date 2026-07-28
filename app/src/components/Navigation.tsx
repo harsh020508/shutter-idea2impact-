@@ -51,11 +51,27 @@ export default function Navigation() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  // Close mobile menu on Escape key
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileOpen]);
+
   const isLanding = location.pathname === "/";
   if (isLanding && !scrolled) return null;
 
   return (
-    <nav className="shutter-nav fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between px-4 lg:px-8">
+    <nav
+      className="shutter-nav fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between px-4 lg:px-8"
+      aria-label="Main navigation"
+      role="navigation"
+    >
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2 shrink-0">
         <div className="w-8 h-8 rounded-lg bg-[#121212] flex items-center justify-center">
@@ -78,6 +94,7 @@ export default function Navigation() {
               <Link
                 key={item.href}
                 to={item.href}
+                aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-all duration-200 whitespace-nowrap ${
                   isActive
                     ? "bg-[#121212] text-white"
@@ -95,7 +112,10 @@ export default function Navigation() {
       <div className="flex items-center gap-2">
         {isAuthenticated ? (
           <>
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#f8f7f4]">
+            <div
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#f8f7f4]"
+              aria-label="User menu"
+            >
               <User className="w-3.5 h-3.5 text-[#848281]" />
               <span className="text-[12px] font-medium text-[#474645] max-w-[120px] truncate">
                 {user?.name || "Retailer"}
@@ -103,6 +123,7 @@ export default function Navigation() {
             </div>
             <button
               onClick={logout}
+              aria-label="Log out"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium text-[#848281] hover:bg-[#f2f0ed] transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -123,6 +144,14 @@ export default function Navigation() {
         <button
           className="lg:hidden p-2 rounded-lg hover:bg-[#f2f0ed] transition-colors"
           onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label="Toggle menu"
+          aria-expanded={mobileOpen}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setMobileOpen(!mobileOpen);
+            }
+          }}
         >
           {mobileOpen ? (
             <X className="w-5 h-5 text-[#474645]" />
@@ -134,7 +163,7 @@ export default function Navigation() {
 
       {/* Mobile Nav */}
       {mobileOpen && (
-        <div className="lg:hidden absolute top-full left-0 right-0 bg-[#fbfaf9] border-t border-[#f2f0ed] shadow-lg max-h-[70vh] overflow-y-auto">
+        <div className="lg:hidden absolute top-full left-0 right-0 bg-[#fbfaf9] border-t border-[#f2f0ed] shadow-lg max-h-[70vh] overflow-y-auto dark:bg-[#1c1a19] dark:border-[#282624]">
           <div className="p-4 grid grid-cols-2 gap-2">
             {navItems.map((item) => {
               const isActive = location.pathname === item.href;
@@ -142,10 +171,11 @@ export default function Navigation() {
                 <Link
                   key={item.href}
                   to={item.href}
+                  aria-current={isActive ? "page" : undefined}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
                     isActive
                       ? "bg-[#121212] text-white"
-                      : "text-[#474645] hover:bg-[#f2f0ed]"
+                      : "text-[#474645] hover:bg-[#f2f0ed] dark:text-[#d4d4d4] dark:hover:bg-[#282624]"
                   }`}
                 >
                   <item.icon className="w-4 h-4" />

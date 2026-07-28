@@ -1,8 +1,14 @@
 {
-  "name": "my-app",
+  "name": "shutter",
+  "version": "1.0.0",
+  "description": "B2B retail platform for Indian kirana stores - inventory, billing, AI insights, and trade matching",
+  "author": "Shutter Team",
+  "license": "MIT",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build && esbuild api/boot.ts --platform=node --bundle --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
@@ -52,7 +58,6 @@
     "@trpc/client": "^11.8.1",
     "@trpc/react-query": "^11.8.1",
     "@trpc/server": "^11.8.1",
-    "@types/three": "^0.183.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -61,7 +66,6 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "embla-carousel-react": "^8.6.0",
-    "gsap": "^3.14.2",
     "hono": "^4.8.3",
     "html5-qrcode": "^2.3.8",
     "input-otp": "^1.4.2",
@@ -83,7 +87,6 @@
     "sonner": "^2.0.7",
     "superjson": "^2.2.6",
     "tailwind-merge": "^3.5.0",
-    "three": "^0.183.2",
     "vaul": "^1.1.2",
     "zod": "^4.3.5"
   },
@@ -111,6 +114,6 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
-    "vitest": "^4.0.16"
+    "vitest": "^4.1.10"
   }
 }

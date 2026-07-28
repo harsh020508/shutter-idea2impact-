@@ -2,7 +2,9 @@ import { z } from "zod";
 import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { demandAggregates, pindrops } from "@db/schema";
+import type { DemandAggregate } from "@db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { encodeGeohash } from "./lib/geohash";
 
 export const demandRouter = createRouter({
   // Get heatmap data for a region
@@ -13,7 +15,7 @@ export const demandRouter = createRouter({
         maxLat: z.number(),
         minLng: z.number(),
         maxLng: z.number(),
-        category: z.string().optional(),
+        category: z.string().max(100).optional(),
         precision: z.number().default(7), // geohash precision
       })
     )
@@ -55,7 +57,7 @@ export const demandRouter = createRouter({
         maxLat: z.number(),
         minLng: z.number(),
         maxLng: z.number(),
-        category: z.string().optional(),
+        category: z.string().max(100).optional(),
         limit: z.number().default(500),
       })
     )
@@ -92,7 +94,7 @@ export const demandRouter = createRouter({
   computeAggregates: authedQuery
     .input(
       z.object({
-        city: z.string().optional(),
+        city: z.string().max(100).optional(),
         hours: z.number().default(8760), // Default to 1 year so all testing pins are aggregated
       })
     )
@@ -170,7 +172,7 @@ export const demandRouter = createRouter({
       z.object({
         latitude: z.number(),
         longitude: z.number(),
-        category: z.string().optional(),
+        category: z.string().max(100).optional(),
       })
     )
     .query(async ({ input }) => {
@@ -209,9 +211,9 @@ export const demandRouter = createRouter({
       // Aggregate across categories if no specific category
       const totalScore = Math.min(
         100,
-        results.reduce((sum: number, r: any) => sum + r.demandScore, 0)
+        results.reduce((sum: number, r: DemandAggregate) => sum + r.demandScore, 0)
       );
-      const totalPindrops = results.reduce((sum: number, r: any) => sum + r.pindropCount, 0);
+      const totalPindrops = results.reduce((sum: number, r: DemandAggregate) => sum + r.pindropCount, 0);
 
       return {
         geohash,
@@ -270,44 +272,3 @@ export const demandRouter = createRouter({
       }>;
     }),
 });
-
-function encodeGeohash(lat: number, lon: number, precision: number): string {
-  const base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-  let idx = 0;
-  let bit = 0;
-  let evenBit = true;
-  let geohash = "";
-
-  let latRange = [-90.0, 90.0];
-  let lonRange = [-180.0, 180.0];
-
-  while (geohash.length < precision) {
-    if (evenBit) {
-      const mid = (lonRange[0] + lonRange[1]) / 2;
-      if (lon >= mid) {
-        idx = idx * 2 + 1;
-        lonRange[0] = mid;
-      } else {
-        idx = idx * 2;
-        lonRange[1] = mid;
-      }
-    } else {
-      const mid = (latRange[0] + latRange[1]) / 2;
-      if (lat >= mid) {
-        idx = idx * 2 + 1;
-        latRange[0] = mid;
-      } else {
-        idx = idx * 2;
-        latRange[1] = mid;
-      }
-    }
-    evenBit = !evenBit;
-    bit++;
-    if (bit === 5) {
-      geohash += base32[idx];
-      bit = 0;
-      idx = 0;
-    }
-  }
-  return geohash;
-}

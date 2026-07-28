@@ -3,19 +3,27 @@ import { env } from "../lib/env";
 import type { SessionPayload } from "./types";
 
 const JWT_ALG = "HS256";
+const MIN_SECRET_LENGTH = 32;
+
+function validateAppSecret(): string {
+  if (!env.appSecret) {
+    throw new Error("APP_SECRET environment variable is required");
+  }
+  if (env.appSecret.length < MIN_SECRET_LENGTH) {
+    throw new Error(`APP_SECRET must be at least ${MIN_SECRET_LENGTH} characters long for HS256 security`);
+  }
+  return env.appSecret;
+}
 
 export async function signSessionToken(
   payload: SessionPayload,
 ): Promise<string> {
-  if (env.isProduction && !env.appSecret) {
-    throw new Error("APP_SECRET environment variable is required in production");
-  }
-  const secretStr = env.appSecret || "developer_local_secret_must_be_at_least_32_characters_long_for_hs256";
+  const secretStr = validateAppSecret();
   const secret = new TextEncoder().encode(secretStr);
   return new jose.SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALG })
     .setIssuedAt()
-    .setExpirationTime("1 year")
+    .setExpirationTime("24h")
     .sign(secret);
 }
 
@@ -27,10 +35,7 @@ export async function verifySessionToken(
     return null;
   }
   try {
-    if (env.isProduction && !env.appSecret) {
-      throw new Error("APP_SECRET environment variable is required in production");
-    }
-    const secretStr = env.appSecret || "developer_local_secret_must_be_at_least_32_characters_long_for_hs256";
+    const secretStr = validateAppSecret();
     const secret = new TextEncoder().encode(secretStr);
     const { payload } = await jose.jwtVerify(token, secret, {
       algorithms: [JWT_ALG],

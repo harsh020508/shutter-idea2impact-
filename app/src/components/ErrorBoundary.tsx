@@ -7,25 +7,70 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  errorInfo: ErrorInfo | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
+    errorInfo: null,
   };
 
-  public static getDerivedStateFromError(error: Error): State {
+  public static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught runtime error:", error, errorInfo);
+    this.setState({ errorInfo });
+
+    // Structured error report for logging and diagnostics
+    const errorReport = {
+      message: error.message,
+      stack: error.stack ?? null,
+      componentStack: errorInfo.componentStack ?? null,
+      timestamp: new Date().toISOString(),
+      url: window.location.href,
+    };
+
+    console.error("Uncaught runtime error:", errorReport);
+
+    // TODO: Integrate an error reporting service (e.g. Sentry, Datadog, Bugsnag).
+    // Example with Sentry:
+    //   Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } });
   }
 
-  private handleReset = () => {
-    this.setState({ hasError: false, error: null });
-    window.location.href = "/dashboard";
+  /** Retry: clear the error and re-render children on the current page. */
+  private handleRetry = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+  };
+
+  /** Go Home: clear the error and navigate to the application root. */
+  private handleGoHome = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+    window.location.href = "/";
+  };
+
+  /** Log extended error details to the console (dev-mode diagnostics). */
+  private handleReport = () => {
+    const { error, errorInfo } = this.state;
+
+    const details = {
+      message: error?.message ?? "Unknown error",
+      name: error?.name ?? "Error",
+      stack: error?.stack ?? "No stack trace available",
+      componentStack: errorInfo?.componentStack ?? "No component stack available",
+      timestamp: new Date().toISOString(),
+      url: window.location.href,
+      userAgent: navigator.userAgent,
+    };
+
+    console.group("[Shutter] Error Report");
+    console.log("Details:", details);
+    console.groupEnd();
+
+    // Surface a brief confirmation so the user knows it worked
+    alert("Error details have been logged to the developer console. Share them with Shutter support if needed.");
   };
 
   public render() {
@@ -40,18 +85,44 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
             <h1 className="text-[18px] font-bold text-[#121212] dark:text-[#fbfaf9] mb-2">Something went wrong</h1>
             <p className="text-[13px] text-[#848281] dark:text-[#a7a7a7] mb-6 leading-relaxed">
-              An unexpected error occurred in Shutter. Click below to return to your dashboard.
+              An unexpected error occurred in Shutter. You can try again or return to the home page.
             </p>
+
+            {/* Collapsible error details */}
             {this.state.error && (
-              <pre className="text-[10px] text-left bg-[#f8f7f4] dark:bg-[#22201d] text-red-500 dark:text-red-400 p-3 rounded-lg overflow-x-auto max-h-32 mb-6 font-mono">
-                {this.state.error.toString()}
-              </pre>
+              <details className="mb-6 text-left">
+                <summary className="text-[12px] font-medium text-[#848281] dark:text-[#a7a7a7] cursor-pointer select-none hover:text-[#121212] dark:hover:text-[#fbfaf9] transition-colors">
+                  Show error details
+                </summary>
+                <pre className="mt-2 text-[10px] bg-[#f8f7f4] dark:bg-[#22201d] text-red-500 dark:text-red-400 p-3 rounded-lg overflow-x-auto max-h-32 font-mono">
+                  {this.state.error.toString()}
+                  {this.state.error.stack && `\n\n${this.state.error.stack}`}
+                </pre>
+              </details>
             )}
+
+            {/* Action buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={this.handleRetry}
+                className="flex-1 bg-[#121212] dark:bg-[#fbfaf9] text-white dark:text-[#121212] py-2.5 rounded-xl text-[13px] font-semibold hover:opacity-95 transition-opacity"
+              >
+                Try Again
+              </button>
+              <button
+                onClick={this.handleGoHome}
+                className="flex-1 border border-[#e5e3e0] dark:border-[#333130] bg-transparent text-[#121212] dark:text-[#fbfaf9] py-2.5 rounded-xl text-[13px] font-semibold hover:bg-[#f4f3f0] dark:hover:bg-[#252320] transition-colors"
+              >
+                Go Home
+              </button>
+            </div>
+
+            {/* Report link */}
             <button
-              onClick={this.handleReset}
-              className="w-full bg-[#121212] dark:bg-[#fbfaf9] text-white dark:text-[#121212] py-2.5 rounded-xl text-[13px] font-semibold hover:opacity-95 transition-opacity"
+              onClick={this.handleReport}
+              className="mt-4 text-[12px] text-[#848281] dark:text-[#a7a7a7] underline underline-offset-2 hover:text-[#121212] dark:hover:text-[#fbfaf9] transition-colors"
             >
-              Back to Safety
+              Report this issue
             </button>
           </div>
         </div>

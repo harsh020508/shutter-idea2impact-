@@ -9,18 +9,18 @@ export const billRouter = createRouter({
   create: authedQuery
     .input(
       z.object({
-        customerPhone: z.string().optional(),
+        customerPhone: z.string().max(15).optional(),
         paymentMethod: z.enum(["cash", "upi", "card"]),
         items: z.array(
           z.object({
             productId: z.number(),
-            productName: z.string(),
+            productName: z.string().max(200),
             quantity: z.number().int().positive(),
             unitPrice: z.number().positive(),
             gstRate: z.number().default(0),
           })
-        ),
-        discount: z.number().default(0),
+        ).max(100),
+        discount: z.number().min(0).default(0),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -50,43 +50,48 @@ export const billRouter = createRouter({
       // Generate bill number
       const billNumber = `B${Date.now()}`;
 
-      // Create bill
-      const billResult = await db.insert(bills).values({
-        retailerId,
-        billNumber,
-        customerPhone: input.customerPhone,
-        subtotal: subtotal.toString(),
-        gstAmount: gstAmount.toString(),
-        discount: input.discount.toString(),
-        total: total.toString(),
-        paymentMethod: input.paymentMethod,
-        status: "completed",
-      });
-
-      const billId = Number(billResult[0].insertId);
-
-      // Create bill items and update inventory
-      for (const item of input.items) {
-        const lineTotal = item.quantity * item.unitPrice;
-        const lineGst = lineTotal * (item.gstRate / 100);
-
-        await db.insert(billItems).values({
-          billId,
-          productId: item.productId,
-          productName: item.productName,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice.toString(),
-          gstRate: item.gstRate.toString(),
-          lineTotal: (lineTotal + lineGst).toString(),
+      // Wrap bill creation and inventory updates in a transaction
+      const result = await db.transaction(async (tx) => {
+        // Create bill
+        const billResult = await tx.insert(bills).values({
+          retailerId,
+          billNumber,
+          customerPhone: input.customerPhone,
+          subtotal: subtotal.toString(),
+          gstAmount: gstAmount.toString(),
+          discount: input.discount.toString(),
+          total: total.toString(),
+          paymentMethod: input.paymentMethod,
+          status: "completed",
         });
 
-        // Decrement inventory
-        await db.execute(
-          sql`UPDATE inventory SET quantity = GREATEST(0, quantity - ${item.quantity}), updatedAt = NOW() WHERE retailerId = ${retailerId} AND productId = ${item.productId}`
-        );
-      }
+        const billId = Number(billResult[0].insertId);
 
-      return { billId, billNumber, total, itemCount: input.items.length };
+        // Create bill items and update inventory
+        for (const item of input.items) {
+          const lineTotal = item.quantity * item.unitPrice;
+          const lineGst = lineTotal * (item.gstRate / 100);
+
+          await tx.insert(billItems).values({
+            billId,
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice.toString(),
+            gstRate: item.gstRate.toString(),
+            lineTotal: (lineTotal + lineGst).toString(),
+          });
+
+          // Decrement inventory
+          await tx.execute(
+            sql`UPDATE inventory SET quantity = GREATEST(0, quantity - ${item.quantity}), updatedAt = NOW() WHERE retailerId = ${retailerId} AND productId = ${item.productId}`
+          );
+        }
+
+        return { billId, billNumber, total, itemCount: input.items.length };
+      });
+
+      return result;
     }),
 
   // Get my bills
