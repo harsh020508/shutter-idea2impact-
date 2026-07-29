@@ -4,6 +4,9 @@ import { getDb } from "./queries/connection";
 import { genieQueries, retailers, demandAggregates } from "@db/schema";
 import type { DemandAggregate } from "@db/schema";
 import { eq, desc } from "drizzle-orm";
+import { createLogger } from "./lib/logger";
+
+const log = createLogger("genie");
 
 interface GeminiCandidate {
   content?: {
@@ -63,7 +66,7 @@ ${demandData.map((d: DemandAggregate) => `- ${d.category} (Demand Score: ${d.dem
       let aiResponse = "";
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        console.warn("[Gemini] GEMINI_API_KEY not set, skipping AI call");
+        log.warn("GEMINI_API_KEY not set, skipping AI call");
       } else {
         try {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
@@ -102,10 +105,10 @@ Provide a helpful, direct, and concise response to the owner's query in 3-4 sent
             const data: GeminiResponse = await response.json();
             aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
           } else {
-            console.error("[Gemini] API returned status", response.status, await response.text());
+            log.error({ status: response.status }, "Gemini API returned error");
           }
         } catch (err) {
-          console.error("[Gemini] request failed", err);
+          log.error({ err }, "Gemini request failed");
         }
       }
 

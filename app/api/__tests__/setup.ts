@@ -4,7 +4,14 @@ import { getDb } from "../queries/connection";
 
 // Mock environment variables for testing
 process.env.NODE_ENV = "test";
+process.env.APP_ID = "test_app_id";
+process.env.APP_SECRET = "test_secret_key_for_testing_min_32_chars_xxxxxxxxx";
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || "mysql://test:test@localhost:3306/shutter_test";
+process.env.KIMI_AUTH_URL = "http://localhost:3000";
+process.env.KIMI_OPEN_URL = "http://localhost:3000";
+process.env.GOOGLE_CLIENT_ID = "test_google_client_id";
+process.env.VITE_SUPABASE_URL = "http://localhost:3000";
+process.env.VITE_SUPABASE_ANON_KEY = "test_anon_key";
 
 let db: ReturnType<typeof getDb>;
 

@@ -10,8 +10,11 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
+import { createLogger } from "./lib/logger";
 import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
+
+const log = createLogger("boot");
 
 // Simple in-memory rate limiter
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
@@ -141,7 +144,7 @@ app.post("/api/auth/google", rateLimit({ windowMs: 60_000, max: 10 }), async (c)
 
     return c.json({ success: true });
   } catch (error: any) {
-    console.error("[Google Auth] failed", error);
+    log.error({ err: error }, "Google Auth failed");
     return c.json({ error: error.message || "Google auth failed" }, 500);
   }
 });
@@ -192,31 +195,31 @@ if (env.isProduction && !process.env.VERCEL) {
 
   const port = parseInt(process.env.PORT || "3000");
   const server = serve({ fetch: app.fetch, port }, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    log.info(`Server running on http://localhost:${port}/`);
   });
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
-    console.log(`\n[${signal}] Shutting down gracefully...`);
+    log.info(`[${signal}] Shutting down gracefully...`);
 
     // Close database pool
     try {
       const { closePool } = await import("./queries/connection");
       await closePool();
-      console.log("[shutdown] Database pool closed");
+      log.info("Database pool closed");
     } catch (err) {
-      console.error("[shutdown] Error closing database pool:", err);
+      log.error({ err }, "Error closing database pool");
     }
 
     // Close HTTP server
     server.close(() => {
-      console.log("[shutdown] HTTP server closed");
+      log.info("HTTP server closed");
       process.exit(0);
     });
 
     // Force exit after 10 seconds if graceful shutdown hangs
     setTimeout(() => {
-      console.error("[shutdown] Forced exit after timeout");
+      log.error("Forced exit after timeout");
       process.exit(1);
     }, 10000);
   };

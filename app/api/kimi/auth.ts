@@ -4,11 +4,14 @@ import * as jose from "jose";
 import { env } from "../lib/env";
 import { getSessionCookieOptions } from "../lib/cookies";
 import { Session } from "@contracts/constants";
+import { createLogger } from "../lib/logger";
 import { signSessionToken } from "./session";
 import { users as kimiUsers } from "./platform";
 import { findUserByUnionId, upsertUser } from "../queries/users";
 import type { TokenResponse } from "./types";
 import crypto from "crypto";
+
+const log = createLogger("auth");
 
 // Cookie names for OAuth state and PKCE
 const OAUTH_STATE_COOKIE = "oauth_state";
@@ -145,9 +148,6 @@ function getJwks() {
 async function verifyAccessToken(
   accessToken: string,
 ): Promise<{ userId: string; clientId: string }> {
-  if (!env.isProduction && accessToken === "mock_access_token") {
-    return { userId: "mock_developer", clientId: "mock_client" };
-  }
   const { payload } = await jose.jwtVerify(accessToken, getJwks());
   const userId = payload.user_id as string;
   const clientId = payload.client_id as string;
@@ -226,7 +226,7 @@ export function createOAuthCallbackHandler() {
       // Verify HMAC signature on state parameter
       const stateData = verifyState(state);
       if (!stateData) {
-        console.error("[OAuth] Invalid state signature - possible CSRF attack");
+        log.warn("Invalid state signature - possible CSRF attack");
         return c.json({ error: "Invalid state parameter" }, 400);
       }
 
@@ -237,7 +237,7 @@ export function createOAuthCallbackHandler() {
         // Check state is not too old (5 minutes max)
         const stateAge = Date.now() - decoded.timestamp;
         if (stateAge > 5 * 60 * 1000) {
-          console.error("[OAuth] State expired");
+          log.warn("State expired");
           return c.json({ error: "State parameter expired" }, 400);
         }
         redirectUri = decoded.redirectUri;
@@ -249,22 +249,12 @@ export function createOAuthCallbackHandler() {
       // Get PKCE verifier from cookie if available
       const codeVerifier = getCookie(c, OAUTH_PKCE_VERIFIER_COOKIE);
 
-      let userId = "mock_developer";
-      let userName = "Local Developer";
-      let userAvatar = "";
-
-      const isMockCode = !env.isProduction && code === "mock_code";
-      if (!isMockCode && env.kimiAuthUrl) {
-        const tokenResp = await exchangeAuthCode(code, redirectUri, codeVerifier);
-        const verified = await verifyAccessToken(tokenResp.access_token);
-        userId = verified.userId;
-        const userProfile = await kimiUsers.getProfile(tokenResp.access_token);
-        if (!userProfile) {
-          throw new Error("Failed to fetch user profile from Kimi Open");
-        }
-        userName = userProfile.name;
-        userAvatar = userProfile.avatar_url;
-      }
+      const tokenResp = await exchangeAuthCode(code, redirectUri, codeVerifier);
+      const verified = await verifyAccessToken(tokenResp.access_token);
+      const userId = verified.userId;
+      const userProfile = await kimiUsers.getProfile(tokenResp.access_token);
+      const userName = userProfile?.name || "User";
+      const userAvatar = userProfile?.avatar_url || "";
 
       await upsertUser({
         unionId: userId,
@@ -275,7 +265,7 @@ export function createOAuthCallbackHandler() {
 
       const token = await signSessionToken({
         unionId: userId,
-        clientId: env.appId || "mock_app_id",
+        clientId: env.appId,
       });
 
       const cookieOpts = getSessionCookieOptions(c.req.raw.headers);
@@ -290,7 +280,7 @@ export function createOAuthCallbackHandler() {
 
       return c.redirect("/", 302);
     } catch (error) {
-      console.error("[OAuth] Callback failed", error);
+      log.error({ err: error }, "OAuth callback failed");
       return c.json({ error: "OAuth callback failed" }, 500);
     }
   };
