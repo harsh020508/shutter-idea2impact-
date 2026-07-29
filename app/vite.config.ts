@@ -28,7 +28,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           "react-vendor": ["react", "react-dom", "react-router"],
-          "maps": ["leaflet", "leaflet.heat"],
           "charts": ["recharts"],
           "ui": [
             "@radix-ui/react-accordion",
